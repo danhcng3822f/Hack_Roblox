@@ -1,4 +1,4 @@
--- LocalScript: UltimateScript_Final.lua
+-- LocalScript: UltimateScript_WithTeleportDown.lua
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
@@ -9,7 +9,7 @@ local player = Players.LocalPlayer
 local Window = Rayfield:CreateWindow({
     Name = "Ultimate Script UI",
     LoadingTitle = "Ultimate Script",
-    LoadingSubtitle = "Speed, ESP, Noclip, Aim",
+    LoadingSubtitle = "Speed, ESP, Noclip, Aim, Teleport",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = nil,
@@ -20,7 +20,7 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Main", 4483362458)
 
--- Speed setup with immediate reset when menu hidden
+-- Speed setup
 local defaultWalkSpeed = 16
 local currentWalkSpeed = defaultWalkSpeed
 
@@ -52,7 +52,6 @@ MainTab:CreateButton({
     end
 })
 
--- Reset tốc độ khi menu ẩn (không ẩn slider)
 spawn(function()
     local lastVisible = true
     while true do
@@ -160,7 +159,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Aim Enemy settings
+-- Aim Enemy toggle and logic
 local aimEnabled = false
 local aimKey = Enum.KeyCode.E
 local Camera = workspace.CurrentCamera
@@ -211,5 +210,17 @@ RunService.RenderStepped:Connect(function()
         end
     end
 end)
+
+-- Nút dịch chuyển xuống lòng đất
+MainTab:CreateButton({
+    Name = "Dịch chuyển xuống lòng đất (50 units)",
+    Callback = function()
+        local char = player.Character or player.CharacterAdded:Wait()
+        local hrp = char:WaitForChild("HumanoidRootPart")
+        local currentPos = hrp.Position
+        local newPos = currentPos - Vector3.new(0, 50, 0)
+        hrp.CFrame = CFrame.new(newPos)
+    end
+})
 
 Rayfield:Init()
