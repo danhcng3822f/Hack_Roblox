@@ -1,57 +1,71 @@
-local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/Kinlei/Rayfield/main/source.lua"))()
+-- LocalScript: SpeedInfiniteJumpUI.lua
 
-local player = game.Players.LocalPlayer
-local humanoid = nil
-local infiniteJumpEnabled = false
+-- Tải Rayfield UI
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
-local function onCharacterAdded(character)
-    humanoid = character:WaitForChild("Humanoid")
-end
-
-if player.Character then
-    onCharacterAdded(player.Character)
-end
-
-player.CharacterAdded:Connect(onCharacterAdded)
-
+-- Tạo cửa sổ giao diện
 local Window = Rayfield:CreateWindow({
-    Title = "Tùy chỉnh tốc độ & nhảy vô hạn",
-    Center = true,
-    AutoShow = true,
+    Name = "Speed + Infinite Jump",
+    LoadingTitle = "Speed & Jump UI",
+    LoadingSubtitle = "by Danh",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = nil,
+        FileName = "SpeedJumpSettings"
+    },
+    Discord = { Enabled = false }
 })
 
-local PlayerTab = Window:CreateTab("Player Settings")
+local MainTab = Window:CreateTab("Main", 4483362458) -- icon ID Roblox
 
-local function setWalkSpeed(speed)
-    if humanoid then
-        humanoid.WalkSpeed = speed
-    end
-end
+local player = game.Players.LocalPlayer
+local infiniteJumpEnabled = false
 
-PlayerTab:CreateSlider({
-    Name = "Tốc độ chạy",
-    Range = {16, 100},
+-- Slider chỉnh tốc độ chạy
+local SpeedSlider = MainTab:CreateSlider({
+    Name = "Chỉnh tốc độ chạy",
+    Range = {8, 100},
     Increment = 1,
     Suffix = "Speed",
     CurrentValue = 16,
-    Flag = "WalkSpeedSlider",
-    Callback = setWalkSpeed,
+    Flag = "WalkSpeed",
+    Callback = function(Value)
+        local char = player.Character or player.CharacterAdded:Wait()
+        local humanoid = char:WaitForChild("Humanoid")
+        humanoid.WalkSpeed = Value
+    end
 })
 
-PlayerTab:CreateToggle({
-    Name = "Infinite Jump",
-    Flag = "InfiniteJumpToggle",
+-- Nút Reset tốc độ
+MainTab:CreateButton({
+    Name = "Reset tốc độ",
+    Callback = function()
+        SpeedSlider:Set(16)
+    end
+})
+
+-- Toggle bật/tắt Infinite Jump
+MainTab:CreateToggle({
+    Name = "Bật Infinite Jump",
     CurrentValue = false,
-    Callback = function(value)
-        infiniteJumpEnabled = value
-    end,
+    Flag = "InfiniteJumpToggle",
+    Callback = function(Value)
+        infiniteJumpEnabled = Value
+    end
 })
 
+-- Xử lý sự kiện nhảy vô hạn
 local UserInputService = game:GetService("UserInputService")
 
 UserInputService.JumpRequest:Connect(function()
-    if infiniteJumpEnabled and humanoid then
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    if infiniteJumpEnabled then
+        local char = player.Character
+        if char then
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end
     end
 end)
 
