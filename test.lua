@@ -362,5 +362,3 @@ Fluent:Notify({
     Content = "Ultimate Script has loaded!",
     Duration = 6
 })
-
-Window:Init()
