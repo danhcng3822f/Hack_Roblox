@@ -18,7 +18,7 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
--- Toggle nút ngoài UI bật/tắt menu chính xác theo Fluent hiện tại
+-- Toggle nút ngoài UI bật/tắt menu chính xác
 local ToggleGui = Instance.new("ScreenGui")
 local Toggle = Instance.new("TextButton")
 local UICorner = Instance.new("UICorner")
@@ -70,7 +70,6 @@ local Tabs = {
 
 local Options = Fluent.Options
 
--- Example inputs and toggles: Speed, JumpPower, InfiniteJump, ESP, Noclip, Aim, Fly, Teleport toggles
 local defaultWalkSpeed = 16
 Tabs.Main:AddInput("WalkSpeedInput", {
     Title = "Chỉnh tốc độ chạy",
@@ -90,9 +89,7 @@ Tabs.Main:AddButton({
     Title = "Reset tốc độ",
     Callback = function()
         local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid.WalkSpeed = defaultWalkSpeed
-        end
+        if humanoid then humanoid.WalkSpeed = defaultWalkSpeed end
     end
 })
 
@@ -115,9 +112,7 @@ Tabs.Main:AddButton({
     Title = "Reset Jump Power",
     Callback = function()
         local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid.JumpPower = defaultJumpPower
-        end
+        if humanoid then humanoid.JumpPower = defaultJumpPower end
     end
 })
 
