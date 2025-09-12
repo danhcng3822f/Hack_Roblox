@@ -10,7 +10,7 @@ local Camera = workspace.CurrentCamera
 
 local Window = Fluent:CreateWindow({
     Title = "Ultimate Script UI",
-    SubTitle = "Script By Danhcng",
+    SubTitle = "by User",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -18,7 +18,7 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
--- Toggle bật tắt menu ngoài UI (nút bấm)
+-- Toggle nút ngoài UI bật/tắt menu chính xác
 local ToggleGui = Instance.new("ScreenGui")
 local Toggle = Instance.new("TextButton")
 local UICorner = Instance.new("UICorner")
@@ -32,7 +32,7 @@ UICorner.Parent = Toggle
 Toggle.Name = "Toggle"
 Toggle.Parent = ToggleGui
 Toggle.BackgroundColor3 = Color3.fromRGB(29, 29, 29)
-Toggle.Position = UDim2.new(0, 10, 0, 200) -- bạn chỉnh vị trí tùy ý
+Toggle.Position = UDim2.new(0, 10, 0, 200)
 Toggle.Size = UDim2.new(0, 80, 0, 38)
 Toggle.Font = Enum.Font.SourceSans
 Toggle.Text = "Close Gui"
@@ -42,25 +42,26 @@ Toggle.Draggable = true
 
 local isOpen = true
 
-local function updateToggleText()
+local function updateMenuState()
     if isOpen then
+        if not Window.Enabled then
+            Window:Open()
+        end
         Toggle.Text = "Close Gui"
     else
+        if Window.Enabled then
+            Window:Close()
+        end
         Toggle.Text = "Open Gui"
     end
 end
 
-updateToggleText()
-
 Toggle.MouseButton1Click:Connect(function()
     isOpen = not isOpen
-    if isOpen then
-        Window:Open()
-    else
-        Window:Close()
-    end
-    updateToggleText()
+    updateMenuState()
 end)
+
+updateMenuState()
 
 local Tabs = {
     Main = Window:AddTab({ Title = "Main", Icon = "box" }),
@@ -68,6 +69,8 @@ local Tabs = {
 }
 
 local Options = Fluent.Options
+
+-- Các tính năng khác giữ nguyên
 
 -- Speed input
 local defaultWalkSpeed = 16
