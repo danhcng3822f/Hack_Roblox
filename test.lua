@@ -18,17 +18,36 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
+-- Thêm logo bật menu
+local logoAssetId = "rbxassetid://11228653710"
+
+local LogoButton = Instance.new("ImageButton")
+LogoButton.Name = "LogoButton"
+LogoButton.BackgroundTransparency = 1
+LogoButton.Size = UDim2.new(0, 48, 0, 48)
+LogoButton.Position = UDim2.new(0, 10, 0, 10)
+LogoButton.Image = logoAssetId
+LogoButton.Parent = game:GetService("CoreGui")
+
+local uiVisible = true
+LogoButton.MouseButton1Click:Connect(function()
+    uiVisible = not uiVisible
+    if uiVisible then
+        Window:Open()
+    else
+        Window:Close()
+    end
+end)
+
 local Tabs = {
-    Main = Window:AddTab({ Title = "Main", Icon = "" }),
+    Main = Window:AddTab({ Title = "Main", Icon = "box" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 
 local Options = Fluent.Options
 
--- Speed & JumpPower inputs
+-- Speed input
 local defaultWalkSpeed = 16
-local defaultJumpPower = 50
-
 Tabs.Main:AddInput("WalkSpeedInput", {
     Title = "Chỉnh tốc độ chạy",
     Placeholder = tostring(defaultWalkSpeed),
@@ -51,6 +70,8 @@ Tabs.Main:AddButton({
     end
 })
 
+-- JumpPower input
+local defaultJumpPower = 50
 Tabs.Main:AddInput("JumpPowerInput", {
     Title = "Chỉnh Jump Power",
     Placeholder = tostring(defaultJumpPower),
@@ -73,7 +94,7 @@ Tabs.Main:AddButton({
     end
 })
 
--- Infinite Jump toggle
+-- Bật tắt Infinite Jump
 local infiniteJumpEnabled = false
 Tabs.Main:AddToggle("InfiniteJumpToggle", {
     Title = "Bật Infinite Jump",
@@ -92,7 +113,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- ESP toggle
+-- ESP toggle (màu đỏ)
 local espEnabled = false
 local espHighlights = {}
 
@@ -100,7 +121,7 @@ local function addESP(p)
     if p ~= player and p.Character and not espHighlights[p] then
         local highlight = Instance.new("Highlight")
         highlight.Adornee = p.Character
-        highlight.FillColor = Color3.fromRGB(255, 0, 0) -- màu đỏ
+        highlight.FillColor = Color3.fromRGB(255, 0, 0)
         highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
         highlight.Name = "ESP_Highlight"
         highlight.Parent = p.Character
