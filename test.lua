@@ -18,7 +18,7 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
--- Toggle nút ngoài UI bật/tắt menu chính xác
+-- Toggle nút hình tròn ngoài UI bật/tắt menu
 local ToggleGui = Instance.new("ScreenGui")
 local Toggle = Instance.new("TextButton")
 local UICorner = Instance.new("UICorner")
@@ -28,32 +28,32 @@ ToggleGui.Parent = player:WaitForChild("PlayerGui")
 ToggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ToggleGui.ResetOnSpawn = false
 
-UICorner.Parent = Toggle
 Toggle.Name = "Toggle"
 Toggle.Parent = ToggleGui
-Toggle.BackgroundColor3 = Color3.fromRGB(29, 29, 29)
-Toggle.Position = UDim2.new(0, 0, 0.4547, 0)
-Toggle.Size = UDim2.new(0, 80, 0, 38)
-Toggle.Font = Enum.Font.SourceSans
-Toggle.Text = "Close Gui"
-Toggle.TextColor3 = Color3.fromRGB(203, 122, 49)
-Toggle.TextSize = 19
-Toggle.Draggable = true
+Toggle.BackgroundColor3 = Color3.fromRGB(203, 122, 49)
+Toggle.Position = UDim2.new(0, 10, 0.5, -25)
+Toggle.Size = UDim2.new(0, 50, 0, 50)
+Toggle.AutoButtonColor = false
+Toggle.Text = ""
+
+UICorner.Parent = Toggle
+UICorner.CornerRadius = UDim.new(1, 0)
 
 local isOpen = true
 
-local function updateToggleText()
+local function updateToggleAppearance()
     if isOpen then
-        Toggle.Text = "Close Gui"
-        if Window.WindowFrame then
-            Window.WindowFrame.Visible = true
-        end
+        Toggle.BackgroundColor3 = Color3.fromRGB(203, 122, 49)
     else
-        Toggle.Text = "Open Gui"
-        if Window.WindowFrame then
-            Window.WindowFrame.Visible = false
-        end
+        Toggle.BackgroundColor3 = Color3.fromRGB(110, 110, 110)
     end
+end
+
+local function updateToggleText()
+    if Window.WindowFrame then
+        Window.WindowFrame.Visible = isOpen
+    end
+    updateToggleAppearance()
 end
 
 Toggle.MouseButton1Click:Connect(function()
@@ -362,3 +362,6 @@ Fluent:Notify({
     Content = "Ultimate Script has loaded!",
     Duration = 6
 })
+
+-- Không gọi Window:Init() theo thư viện mới
+
