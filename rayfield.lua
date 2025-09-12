@@ -20,7 +20,6 @@ local MainTab = Window:CreateTab("Main", 4483362458)
 
 -- Speed Input
 local defaultWalkSpeed = 16
-local currentWalkSpeed = defaultWalkSpeed
 
 local function setSpeed(value)
     local char = player.Character or player.CharacterAdded:Wait()
@@ -30,10 +29,8 @@ local function setSpeed(value)
     if humanoid then
         if numValue and numValue >= 8 and numValue <= 100 then
             humanoid.WalkSpeed = numValue
-            currentWalkSpeed = numValue
         else
             humanoid.WalkSpeed = defaultWalkSpeed
-            currentWalkSpeed = defaultWalkSpeed
         end
     end
 end
@@ -52,7 +49,7 @@ MainTab:CreateButton({
     end
 })
 
--- Infinite Jump
+-- Infinite Jump Toggle
 local infiniteJumpEnabled = false
 MainTab:CreateToggle({
     Name = "Bật Infinite Jump",
@@ -75,7 +72,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- ESP Player
+-- ESP Player Toggle
 local espEnabled = false
 local espHighlights = {}
 
@@ -126,7 +123,7 @@ end)
 
 Players.PlayerRemoving:Connect(removeESP)
 
--- Noclip
+-- Noclip Toggle
 local noclipEnabled = false
 MainTab:CreateToggle({
     Name = "Bật Noclip",
@@ -146,7 +143,7 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- Aim Enemy
+-- Aim Enemy Toggle
 local aimEnabled = false
 local aimKey = Enum.KeyCode.E
 local Camera = workspace.CurrentCamera
@@ -200,8 +197,10 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Fly Mode
+-- Fly Mode (mobile-friendly)
 local flying = false
+local flyUp = false
+local flyDown = false
 local flySpeed = 50
 local bodyVelocity, bodyGyro
 
@@ -209,12 +208,12 @@ local function startFly()
     local char = player.Character or player.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
     bodyVelocity = Instance.new("BodyVelocity")
-    bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    bodyVelocity.MaxForce = Vector3.new(1e5,1e5,1e5)
+    bodyVelocity.Velocity = Vector3.new(0,0,0)
     bodyVelocity.Parent = hrp
 
     bodyGyro = Instance.new("BodyGyro")
-    bodyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+    bodyGyro.MaxTorque = Vector3.new(1e5,1e5,1e5)
     bodyGyro.CFrame = hrp.CFrame
     bodyGyro.Parent = hrp
 end
@@ -222,26 +221,48 @@ end
 local function stopFly()
     if bodyVelocity then
         bodyVelocity:Destroy()
-        bodyVelocity = nil
+        bodyVelocity=nil
     end
     if bodyGyro then
         bodyGyro:Destroy()
-        bodyGyro = nil
+        bodyGyro=nil
     end
 end
 
 MainTab:CreateToggle({
-    Name = "Bật Fly Mode (WSAD + Space/Shift bay lên xuống)",
+    Name = "Bật Fly Mode (Mobile friendly)",
     CurrentValue = false,
     Flag = "FlyToggle",
-    Callback = function(v)
-        flying = v
+    Callback = function(value)
+        flying = value
+        flyUp = false
+        flyDown = false
         if flying then
             startFly()
         else
             stopFly()
         end
-    end,
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Bay lên (cho mobile)",
+    CurrentValue = false,
+    Flag = "FlyUpToggle",
+    Callback = function(value)
+        flyUp = value
+        if value then flyDown = false end
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Bay xuống (cho mobile)",
+    CurrentValue = false,
+    Flag = "FlyDownToggle",
+    Callback = function(value)
+        flyDown = value
+        if value then flyUp = false end
+    end
 })
 
 RunService.Heartbeat:Connect(function()
@@ -250,37 +271,23 @@ RunService.Heartbeat:Connect(function()
         if char then
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if hrp then
-                local moveVec = Vector3.new()
-                if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-                    moveVec = moveVec + workspace.CurrentCamera.CFrame.LookVector
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-                    moveVec = moveVec - workspace.CurrentCamera.CFrame.LookVector
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-                    moveVec = moveVec - workspace.CurrentCamera.CFrame.RightVector
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-                    moveVec = moveVec + workspace.CurrentCamera.CFrame.RightVector
-                end
-                if moveVec.Magnitude > 0 then
-                    bodyVelocity.Velocity = moveVec.Unit * flySpeed
-                else
-                    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-                end
+                -- Di chuyển theo hướng camera với tốc độ thấp hơn để dễ dàng kiểm soát trên mobile
+                local moveVector = workspace.CurrentCamera.CFrame.LookVector * 0.5
+                bodyVelocity.Velocity = moveVector * flySpeed
 
-                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                if flyUp then
                     bodyVelocity.Velocity = bodyVelocity.Velocity + Vector3.new(0, flySpeed, 0)
-                elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                elseif flyDown then
                     bodyVelocity.Velocity = bodyVelocity.Velocity - Vector3.new(0, flySpeed, 0)
                 end
+
                 bodyGyro.CFrame = workspace.CurrentCamera.CFrame
             end
         end
     end
 end)
 
--- Teleport Toggles
+-- Teleport toggles for up and down
 local teleportUp = false
 local teleportDown = false
 local teleportHeight = 50
@@ -289,8 +296,8 @@ MainTab:CreateToggle({
     Name = "Dịch chuyển lên trên trời (Giữ bật)",
     CurrentValue = false,
     Flag = "TeleportUpToggle",
-    Callback = function(v)
-        teleportUp = v
+    Callback = function(value)
+        teleportUp = value
         if teleportUp then teleportDown = false end
     end,
 })
@@ -299,8 +306,8 @@ MainTab:CreateToggle({
     Name = "Dịch chuyển xuống lòng đất (Giữ bật)",
     CurrentValue = false,
     Flag = "TeleportDownToggle",
-    Callback = function(v)
-        teleportDown = v
+    Callback = function(value)
+        teleportDown = value
         if teleportDown then teleportUp = false end
     end,
 })
