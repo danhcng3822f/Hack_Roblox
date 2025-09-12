@@ -1,4 +1,4 @@
--- LocalScript: UltimateScript_WithTeleportDown.lua
+-- LocalScript: UltimateScript_Complete.lua
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
@@ -9,7 +9,7 @@ local player = Players.LocalPlayer
 local Window = Rayfield:CreateWindow({
     Name = "Ultimate Script UI",
     LoadingTitle = "Ultimate Script",
-    LoadingSubtitle = "Speed, ESP, Noclip, Aim, Teleport",
+    LoadingSubtitle = "Speed, ESP, Noclip, Aim, Fly, Infinite Jump",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = nil,
@@ -22,7 +22,6 @@ local MainTab = Window:CreateTab("Main", 4483362458)
 
 -- Speed setup
 local defaultWalkSpeed = 16
-local currentWalkSpeed = defaultWalkSpeed
 
 local function setSpeed(value)
     local char = player.Character or player.CharacterAdded:Wait()
@@ -30,7 +29,6 @@ local function setSpeed(value)
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if humanoid then
         humanoid.WalkSpeed = value
-        currentWalkSpeed = value
     end
 end
 
@@ -53,26 +51,30 @@ MainTab:CreateButton({
 })
 
 spawn(function()
-    local lastVisible = true
+    local wasVisible = true
     while true do
-        local nowVisible = Window.Visible
-        if nowVisible ~= lastVisible then
-            if not nowVisible then
+        local visible = Window.Visible
+        if visible ~= wasVisible then
+            if not visible then
                 setSpeed(defaultWalkSpeed)
             end
-            lastVisible = nowVisible
+            wasVisible = visible
         end
         wait(0.1)
     end
 end)
 
--- Infinite Jump toggle
+-- Infinite Jump with delay
 local infiniteJumpEnabled = false
+local lastJumpTime = 0
+
 MainTab:CreateToggle({
     Name = "Bật Infinite Jump",
     CurrentValue = false,
     Flag = "InfiniteJumpToggle",
-    Callback = function(v) infiniteJumpEnabled = v end,
+    Callback = function(value)
+        infiniteJumpEnabled = value
+    end,
 })
 
 -- ESP Player toggle
@@ -132,7 +134,9 @@ MainTab:CreateToggle({
     Name = "Bật Noclip",
     CurrentValue = false,
     Flag = "NoclipToggle",
-    Callback = function(v) noclipEnabled = v end,
+    Callback = function(value)
+        noclipEnabled = value
+    end,
 })
 
 RunService.Stepped:Connect(function()
@@ -141,19 +145,6 @@ RunService.Stepped:Connect(function()
         for _, part in pairs(char:GetChildren()) do
             if part:IsA("BasePart") then
                 part.CanCollide = not noclipEnabled
-            end
-        end
-    end
-end)
-
--- Infinite Jump handler
-RunService.Heartbeat:Connect(function()
-    if infiniteJumpEnabled then
-        local char = player.Character
-        if char then
-            local humanoid = char:FindFirstChildOfClass("Humanoid")
-            if humanoid and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
             end
         end
     end
@@ -168,7 +159,9 @@ MainTab:CreateToggle({
     Name = "Bật Aim Enemy (Chỉ aim kẻ địch)",
     CurrentValue = false,
     Flag = "AimToggle",
-    Callback = function(v) aimEnabled = v end,
+    Callback = function(value)
+        aimEnabled = value
+    end,
 })
 
 local function isEnemy(playerA, playerB)
@@ -211,16 +204,104 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Nút dịch chuyển xuống lòng đất
-MainTab:CreateButton({
-    Name = "Dịch chuyển xuống lòng đất (50 units)",
-    Callback = function()
-        local char = player.Character or player.CharacterAdded:Wait()
-        local hrp = char:WaitForChild("HumanoidRootPart")
-        local currentPos = hrp.Position
-        local newPos = currentPos - Vector3.new(0, 50, 0)
-        hrp.CFrame = CFrame.new(newPos)
+-- Fly mode implementation
+local flying = false
+local flySpeed = 50
+local bodyVelocity, bodyGyro
+
+local function startFly()
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    bodyVelocity.Parent = hrp
+
+    bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+    bodyGyro.CFrame = hrp.CFrame
+    bodyGyro.Parent = hrp
+end
+
+local function stopFly()
+    if bodyVelocity then
+        bodyVelocity:Destroy()
+        bodyVelocity = nil
     end
+    if bodyGyro then
+        bodyGyro:Destroy()
+        bodyGyro = nil
+    end
+end
+
+MainTab:CreateToggle({
+    Name = "Bật Fly Mode (WSAD + Space/Shift bay lên xuống)",
+    CurrentValue = false,
+    Flag = "FlyToggle",
+    Callback = function(value)
+        flying = value
+        if flying then
+            startFly()
+        else
+            stopFly()
+        end
+    end,
 })
+
+RunService.Heartbeat:Connect(function()
+    if flying and bodyVelocity and bodyGyro then
+        local char = player.Character
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local moveVector = Vector3.new()
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                    moveVector = moveVector + workspace.CurrentCamera.CFrame.LookVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                    moveVector = moveVector - workspace.CurrentCamera.CFrame.LookVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                    moveVector = moveVector - workspace.CurrentCamera.CFrame.RightVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                    moveVector = moveVector + workspace.CurrentCamera.CFrame.RightVector
+                end
+                
+                if moveVector.Magnitude > 0 then
+                    bodyVelocity.Velocity = moveVector.Unit * flySpeed
+                else
+                    bodyVelocity.Velocity = Vector3.new(0,0,0)
+                end
+
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                    bodyVelocity.Velocity = bodyVelocity.Velocity + Vector3.new(0, flySpeed, 0)
+                elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                    bodyVelocity.Velocity = bodyVelocity.Velocity - Vector3.new(0, flySpeed, 0)
+                end
+
+                bodyGyro.CFrame = workspace.CurrentCamera.CFrame
+            end
+        end
+    end
+end)
+
+-- Infinite Jump improved with delay
+local lastJumpTime = 0
+RunService.Heartbeat:Connect(function()
+    if infiniteJumpEnabled then
+        local char = player.Character
+        if char then
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if humanoid and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                local currentTime = tick()
+                if currentTime - lastJumpTime > 0.25 then
+                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                    lastJumpTime = currentTime
+                end
+            end
+        end
+    end
+end)
 
 Rayfield:Init()
