@@ -32,7 +32,7 @@ UICorner.Parent = Toggle
 Toggle.Name = "Toggle"
 Toggle.Parent = ToggleGui
 Toggle.BackgroundColor3 = Color3.fromRGB(29, 29, 29)
-Toggle.Position = UDim2.new(0, 10, 0, 200)
+Toggle.Position = UDim2.new(0, 0, 0.4547, 0)
 Toggle.Size = UDim2.new(0, 80, 0, 38)
 Toggle.Font = Enum.Font.SourceSans
 Toggle.Text = "Close Gui"
@@ -42,26 +42,22 @@ Toggle.Draggable = true
 
 local isOpen = true
 
-local function updateMenuState()
+local function updateToggleText()
     if isOpen then
-        if not Window.Enabled then
-            Window:Open()
-        end
         Toggle.Text = "Close Gui"
+        Window:Open()
     else
-        if Window.Enabled then
-            Window:Close()
-        end
         Toggle.Text = "Open Gui"
+        Window:Close()
     end
 end
 
 Toggle.MouseButton1Click:Connect(function()
     isOpen = not isOpen
-    updateMenuState()
+    updateToggleText()
 end)
 
-updateMenuState()
+updateToggleText()
 
 local Tabs = {
     Main = Window:AddTab({ Title = "Main", Icon = "box" }),
@@ -69,8 +65,6 @@ local Tabs = {
 }
 
 local Options = Fluent.Options
-
--- Các tính năng khác giữ nguyên
 
 -- Speed input
 local defaultWalkSpeed = 16
@@ -353,13 +347,14 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Setup SaveManager and InterfaceManager for config saving
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 
 SaveManager:IgnoreThemeSettings()
-SaveManager:SetFolder("FluentScriptHub")
-InterfaceManager:SetFolder("FluentScriptHub/specific-game")
+SaveManager:SetIgnoreIndexes({})
+
+InterfaceManager:SetFolder("FluentScriptHub")
+SaveManager:SetFolder("FluentScriptHub/specific-game")
 
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
