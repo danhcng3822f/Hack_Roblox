@@ -1,4 +1,4 @@
--- LocalScript: UltimateScript_NoAim_FlyFixed_Noclip.lua
+-- LocalScript: UltimateScript_FullWithSpeedFix.lua
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
@@ -9,7 +9,7 @@ local player = Players.LocalPlayer
 local Window = Rayfield:CreateWindow({
     Name = "Ultimate Script UI",
     LoadingTitle = "Ultimate Script",
-    LoadingSubtitle = "Speed, Fly (Fixed), ESP, Noclip",
+    LoadingSubtitle = "Speed, ESP, Noclip, Aim",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = nil,
@@ -20,27 +20,50 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Main", 4483362458)
 
--- Speed Control
+-- Biến mặc định tốc độ
+local defaultWalkSpeed = 16
+local currentWalkSpeed = defaultWalkSpeed
+
+local function setSpeed(value)
+    local char = player.Character or player.CharacterAdded:Wait()
+    local humanoid = char:WaitForChild("Humanoid")
+    humanoid.WalkSpeed = value
+    currentWalkSpeed = value
+end
+
 local SpeedSlider = MainTab:CreateSlider({
     Name = "Chỉnh tốc độ chạy",
     Range = {8, 100},
     Increment = 1,
     Suffix = "Speed",
-    CurrentValue = 16,
+    CurrentValue = defaultWalkSpeed,
     Flag = "WalkSpeed",
-    Callback = function(Value)
-        local char = player.Character or player.CharacterAdded:Wait()
-        local humanoid = char:WaitForChild("Humanoid")
-        humanoid.WalkSpeed = Value
-    end
+    Callback = setSpeed,
 })
 
 MainTab:CreateButton({
     Name = "Reset tốc độ",
     Callback = function()
-        SpeedSlider:Set(16)
+        SpeedSlider:Set(defaultWalkSpeed)
+        setSpeed(defaultWalkSpeed)
     end
 })
+
+-- Reset tốc độ khi ẩn menu ngay lập tức
+spawn(function()
+    local lastVisible = true
+    while true do
+        local vis = Window.Visible
+        if vis ~= lastVisible then
+            if not vis then
+                setSpeed(defaultWalkSpeed)
+                SpeedSlider:Set(defaultWalkSpeed)
+            end
+            lastVisible = vis
+        end
+        wait(0.1)
+    end
+end)
 
 -- Infinite Jump Toggle
 local infiniteJumpEnabled = false
@@ -50,51 +73,6 @@ MainTab:CreateToggle({
     Flag = "InfiniteJumpToggle",
     Callback = function(Value)
         infiniteJumpEnabled = Value
-    end
-})
-
--- Fly Toggle và điều khiển fly
-local flying = false
-local flySpeed = 50
-local flyBodyVelocity, flyBodyGyro
-
-local function startFly()
-    local char = player.Character or player.CharacterAdded:Wait()
-    local hrp = char:WaitForChild("HumanoidRootPart")
-
-    flyBodyVelocity = Instance.new("BodyVelocity")
-    flyBodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-    flyBodyVelocity.Velocity = Vector3.new(0,0,0)
-    flyBodyVelocity.Parent = hrp
-
-    flyBodyGyro = Instance.new("BodyGyro")
-    flyBodyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-    flyBodyGyro.CFrame = hrp.CFrame
-    flyBodyGyro.Parent = hrp
-end
-
-local function stopFly()
-    if flyBodyVelocity then
-        flyBodyVelocity:Destroy()
-        flyBodyVelocity = nil
-    end
-    if flyBodyGyro then
-        flyBodyGyro:Destroy()
-        flyBodyGyro = nil
-    end
-end
-
-MainTab:CreateToggle({
-    Name = "Bật Fly (Dùng WSAD + Space/Shift để bay lên/xuống)",
-    CurrentValue = false,
-    Flag = "FlyToggle",
-    Callback = function(Value)
-        flying = Value
-        if flying then
-            startFly()
-        else
-            stopFly()
-        end
     end
 })
 
@@ -169,61 +147,77 @@ RunService.Stepped:Connect(function()
     local char = player.Character
     if char then
         for _, part in pairs(char:GetChildren()) do
-            if part:IsA("BasePart") and part.CanCollide then
-                if noclipEnabled then
-                    part.CanCollide = false
-                else
-                    part.CanCollide = true
-                end
+            if part:IsA("BasePart") then
+                part.CanCollide = not noclipEnabled
             end
         end
     end
 end)
 
--- Sự kiện kiểm soát bay
+-- Infinite Jump Handler
 RunService.Heartbeat:Connect(function()
-    if flying and flyBodyVelocity and flyBodyGyro then
-        local char = player.Character
-        if char then
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local moveVec = Vector3.new()
-                if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-                    moveVec = moveVec + workspace.CurrentCamera.CFrame.LookVector
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-                    moveVec = moveVec - workspace.CurrentCamera.CFrame.LookVector
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-                    moveVec = moveVec - workspace.CurrentCamera.CFrame.RightVector
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-                    moveVec = moveVec + workspace.CurrentCamera.CFrame.RightVector
-                end
-
-                flyBodyVelocity.Velocity = moveVec.Unit * flySpeed
-
-                -- Bay lên và xuống
-                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-                    flyBodyVelocity.Velocity = flyBodyVelocity.Velocity + Vector3.new(0, flySpeed, 0)
-                elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-                    flyBodyVelocity.Velocity = flyBodyVelocity.Velocity - Vector3.new(0, flySpeed, 0)
-                end
-
-                flyBodyGyro.CFrame = workspace.CurrentCamera.CFrame
-            end
-        end
-    end
-    -- Infinite Jump
     if infiniteJumpEnabled then
         local char = player.Character
         if char then
             local humanoid = char:FindFirstChildOfClass("Humanoid")
-            if humanoid then
-                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            if humanoid and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end
+    end
+end)
+
+-- Aim Enemy Toggle
+local aimEnabled = false
+local aimKey = Enum.KeyCode.E
+local Camera = workspace.CurrentCamera
+
+MainTab:CreateToggle({
+    Name = "Bật Aim Enemy (Chỉ aim kẻ địch)",
+    CurrentValue = false,
+    Flag = "AimToggle",
+    Callback = function(value)
+        aimEnabled = value
+    end
+})
+
+local function isEnemy(playerA, playerB)
+    if playerA.Team and playerB.Team then
+        return playerA.Team ~= playerB.Team
+    end
+    return true
+end
+
+local function getNearestEnemy()
+    local nearest, nearestDist
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= player and p.Character and p.Character:FindFirstChild("Head") and isEnemy(player, p) then
+            local headPos = p.Character.Head.Position
+            local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
+            if onScreen then
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
+                if not nearestDist or dist < nearestDist then
+                    nearestDist = dist
+                    nearest = p.Character.Head
                 end
             end
+        end
+    end
+    return nearest
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == aimKey then
+        aimEnabled = not aimEnabled
+        MainTab:FindFirstChild("AimToggle").Flag = aimEnabled
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if aimEnabled then
+        local target = getNearestEnemy()
+        if target then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Position)
         end
     end
 end)
