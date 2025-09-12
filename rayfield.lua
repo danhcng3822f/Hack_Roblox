@@ -1,4 +1,4 @@
--- LocalScript: UltimateScript_FullWithSpeedFix.lua
+-- LocalScript: UltimateScript_Final.lua
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
@@ -20,15 +20,18 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Main", 4483362458)
 
--- Biến mặc định tốc độ
+-- Speed setup with immediate reset when menu hidden
 local defaultWalkSpeed = 16
 local currentWalkSpeed = defaultWalkSpeed
 
 local function setSpeed(value)
     local char = player.Character or player.CharacterAdded:Wait()
-    local humanoid = char:WaitForChild("Humanoid")
-    humanoid.WalkSpeed = value
-    currentWalkSpeed = value
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = value
+        currentWalkSpeed = value
+    end
 end
 
 local SpeedSlider = MainTab:CreateSlider({
@@ -49,34 +52,31 @@ MainTab:CreateButton({
     end
 })
 
--- Reset tốc độ khi ẩn menu ngay lập tức
+-- Reset tốc độ khi menu ẩn (không ẩn slider)
 spawn(function()
     local lastVisible = true
     while true do
-        local vis = Window.Visible
-        if vis ~= lastVisible then
-            if not vis then
+        local nowVisible = Window.Visible
+        if nowVisible ~= lastVisible then
+            if not nowVisible then
                 setSpeed(defaultWalkSpeed)
-                SpeedSlider:Set(defaultWalkSpeed)
             end
-            lastVisible = vis
+            lastVisible = nowVisible
         end
         wait(0.1)
     end
 end)
 
--- Infinite Jump Toggle
+-- Infinite Jump toggle
 local infiniteJumpEnabled = false
 MainTab:CreateToggle({
     Name = "Bật Infinite Jump",
     CurrentValue = false,
     Flag = "InfiniteJumpToggle",
-    Callback = function(Value)
-        infiniteJumpEnabled = Value
-    end
+    Callback = function(v) infiniteJumpEnabled = v end,
 })
 
--- ESP Player Toggle
+-- ESP Player toggle
 local espEnabled = false
 local espHighlights = {}
 
@@ -116,31 +116,24 @@ MainTab:CreateToggle({
     Name = "Bật ESP Player",
     CurrentValue = false,
     Flag = "ESPToggle",
-    Callback = toggleESP
+    Callback = toggleESP,
 })
 
 Players.PlayerAdded:Connect(function(p)
     p.CharacterAdded:Connect(function()
-        if espEnabled then
-            addESP(p)
-        end
+        if espEnabled then addESP(p) end
     end)
 end)
 
-Players.PlayerRemoving:Connect(function(p)
-    removeESP(p)
-end)
+Players.PlayerRemoving:Connect(removeESP)
 
--- Noclip Toggle
+-- Noclip toggle
 local noclipEnabled = false
-
 MainTab:CreateToggle({
     Name = "Bật Noclip",
     CurrentValue = false,
     Flag = "NoclipToggle",
-    Callback = function(Value)
-        noclipEnabled = Value
-    end
+    Callback = function(v) noclipEnabled = v end,
 })
 
 RunService.Stepped:Connect(function()
@@ -154,7 +147,7 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- Infinite Jump Handler
+-- Infinite Jump handler
 RunService.Heartbeat:Connect(function()
     if infiniteJumpEnabled then
         local char = player.Character
@@ -167,7 +160,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Aim Enemy Toggle
+-- Aim Enemy settings
 local aimEnabled = false
 local aimKey = Enum.KeyCode.E
 local Camera = workspace.CurrentCamera
@@ -176,9 +169,7 @@ MainTab:CreateToggle({
     Name = "Bật Aim Enemy (Chỉ aim kẻ địch)",
     CurrentValue = false,
     Flag = "AimToggle",
-    Callback = function(value)
-        aimEnabled = value
-    end
+    Callback = function(v) aimEnabled = v end,
 })
 
 local function isEnemy(playerA, playerB)
@@ -189,17 +180,15 @@ local function isEnemy(playerA, playerB)
 end
 
 local function getNearestEnemy()
-    local nearest, nearestDist
+    if not player.Character or not player.Character:FindFirstChild("Head") then return nil end
+    local nearest, nearestDist = nil, math.huge
+    local ownHeadPos = player.Character.Head.Position
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= player and p.Character and p.Character:FindFirstChild("Head") and isEnemy(player, p) then
-            local headPos = p.Character.Head.Position
-            local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
-            if onScreen then
-                local dist = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
-                if not nearestDist or dist < nearestDist then
-                    nearestDist = dist
-                    nearest = p.Character.Head
-                end
+            local dist = (ownHeadPos - p.Character.Head.Position).Magnitude
+            if dist < nearestDist then
+                nearestDist = dist
+                nearest = p.Character.Head
             end
         end
     end
@@ -209,7 +198,8 @@ end
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and input.KeyCode == aimKey then
         aimEnabled = not aimEnabled
-        MainTab:FindFirstChild("AimToggle").Flag = aimEnabled
+        local toggle = MainTab:FindFirstChild("AimToggle")
+        if toggle then toggle.Flag = aimEnabled end
     end
 end)
 
