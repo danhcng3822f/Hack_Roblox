@@ -15,10 +15,10 @@ local Window = Fluent:CreateWindow({
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
     Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.LeftControl
+    MinimizeKey = Enum.KeyCode.LeftAlt  -- Đổi phím minimize để tránh xung đột
 })
 
--- Toggle nút hình tròn ngoài UI bật/tắt menu
+-- Toggle nút ngoài UI hình tròn để đóng/mở menu
 local ToggleGui = Instance.new("ScreenGui")
 local Toggle = Instance.new("TextButton")
 local UICorner = Instance.new("UICorner")
@@ -70,6 +70,7 @@ local Tabs = {
 
 local Options = Fluent.Options
 
+-- WalkSpeed chỉnh tốc độ chạy
 local defaultWalkSpeed = 16
 Tabs.Main:AddInput("WalkSpeedInput", {
     Title = "Chỉnh tốc độ chạy",
@@ -93,6 +94,7 @@ Tabs.Main:AddButton({
     end
 })
 
+-- JumpPower chỉnh lực nhảy
 local defaultJumpPower = 50
 Tabs.Main:AddInput("JumpPowerInput", {
     Title = "Chỉnh Jump Power",
@@ -116,6 +118,7 @@ Tabs.Main:AddButton({
     end
 })
 
+-- Infinite Jump toggle
 local infiniteJumpEnabled = false
 Tabs.Main:AddToggle("InfiniteJumpToggle", {
     Title = "Bật Infinite Jump",
@@ -134,6 +137,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
+-- ESP toggle
 local espEnabled = false
 local espHighlights = {}
 
@@ -181,6 +185,7 @@ end)
 
 Players.PlayerRemoving:Connect(removeESP)
 
+-- Noclip toggle
 local noclipEnabled = false
 Tabs.Main:AddToggle("NoclipToggle", {
     Title = "Bật Noclip",
@@ -201,6 +206,7 @@ RunService.Stepped:Connect(function()
     end
 end)
 
+-- Aim toggle
 local aimEnabled = false
 local aimKey = Enum.KeyCode.E
 
@@ -251,6 +257,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+-- Fly Mode toggle
 local flying = false
 local flySpeed = 50
 local bodyVelocity, bodyGyro
@@ -307,6 +314,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- Teleport toggles
 local teleportUp = false
 local teleportDown = false
 local teleportHeight = 50
@@ -343,6 +351,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- SaveManager and InterfaceManager config
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 
@@ -364,4 +373,3 @@ Fluent:Notify({
 })
 
 -- Không gọi Window:Init() theo thư viện mới
-
