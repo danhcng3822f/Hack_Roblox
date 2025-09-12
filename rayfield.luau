@@ -1,5 +1,5 @@
 -- Load Rayfield UI library
-local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/yourusername/rayfield/main/source.lua"))()
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local player = game.Players.LocalPlayer
 local humanoid = nil
