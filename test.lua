@@ -18,7 +18,7 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
--- Toggle nút ngoài UI bật/tắt menu chính xác
+-- Toggle nút ngoài UI bật/tắt menu chính xác theo Fluent hiện tại
 local ToggleGui = Instance.new("ScreenGui")
 local Toggle = Instance.new("TextButton")
 local UICorner = Instance.new("UICorner")
@@ -45,10 +45,14 @@ local isOpen = true
 local function updateToggleText()
     if isOpen then
         Toggle.Text = "Close Gui"
-        Window:Open()
+        if Window.WindowFrame then
+            Window.WindowFrame.Visible = true
+        end
     else
         Toggle.Text = "Open Gui"
-        Window:Close()
+        if Window.WindowFrame then
+            Window.WindowFrame.Visible = false
+        end
     end
 end
 
@@ -66,7 +70,7 @@ local Tabs = {
 
 local Options = Fluent.Options
 
--- Speed input
+-- Example inputs and toggles: Speed, JumpPower, InfiniteJump, ESP, Noclip, Aim, Fly, Teleport toggles
 local defaultWalkSpeed = 16
 Tabs.Main:AddInput("WalkSpeedInput", {
     Title = "Chỉnh tốc độ chạy",
@@ -86,11 +90,12 @@ Tabs.Main:AddButton({
     Title = "Reset tốc độ",
     Callback = function()
         local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then humanoid.WalkSpeed = defaultWalkSpeed end
+        if humanoid then
+            humanoid.WalkSpeed = defaultWalkSpeed
+        end
     end
 })
 
--- JumpPower input
 local defaultJumpPower = 50
 Tabs.Main:AddInput("JumpPowerInput", {
     Title = "Chỉnh Jump Power",
@@ -110,11 +115,12 @@ Tabs.Main:AddButton({
     Title = "Reset Jump Power",
     Callback = function()
         local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then humanoid.JumpPower = defaultJumpPower end
+        if humanoid then
+            humanoid.JumpPower = defaultJumpPower
+        end
     end
 })
 
--- Infinite Jump toggle
 local infiniteJumpEnabled = false
 Tabs.Main:AddToggle("InfiniteJumpToggle", {
     Title = "Bật Infinite Jump",
@@ -133,7 +139,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- ESP toggle (màu đỏ)
 local espEnabled = false
 local espHighlights = {}
 
@@ -181,7 +186,6 @@ end)
 
 Players.PlayerRemoving:Connect(removeESP)
 
--- Noclip toggle
 local noclipEnabled = false
 Tabs.Main:AddToggle("NoclipToggle", {
     Title = "Bật Noclip",
@@ -202,7 +206,6 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- Aim toggle
 local aimEnabled = false
 local aimKey = Enum.KeyCode.E
 
@@ -253,7 +256,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Fly Mode (mobile friendly)
 local flying = false
 local flySpeed = 50
 local bodyVelocity, bodyGyro
@@ -310,7 +312,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Teleport toggle
 local teleportUp = false
 local teleportDown = false
 local teleportHeight = 50
