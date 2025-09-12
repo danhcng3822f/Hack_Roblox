@@ -1,4 +1,4 @@
--- LocalScript: UltimateScript.lua
+-- LocalScript: UltimateScript_NoAim_FlyFixed_Noclip.lua
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
@@ -9,7 +9,7 @@ local player = Players.LocalPlayer
 local Window = Rayfield:CreateWindow({
     Name = "Ultimate Script UI",
     LoadingTitle = "Ultimate Script",
-    LoadingSubtitle = "Speed, Fly, ESP, Aim",
+    LoadingSubtitle = "Speed, Fly (Fixed), ESP, Noclip",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = nil,
@@ -53,28 +53,47 @@ MainTab:CreateToggle({
     end
 })
 
--- Fly Toggle
+-- Fly Toggle và điều khiển fly
 local flying = false
 local flySpeed = 50
-local bodyVelocity
+local flyBodyVelocity, flyBodyGyro
+
+local function startFly()
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+
+    flyBodyVelocity = Instance.new("BodyVelocity")
+    flyBodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+    flyBodyVelocity.Velocity = Vector3.new(0,0,0)
+    flyBodyVelocity.Parent = hrp
+
+    flyBodyGyro = Instance.new("BodyGyro")
+    flyBodyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+    flyBodyGyro.CFrame = hrp.CFrame
+    flyBodyGyro.Parent = hrp
+end
+
+local function stopFly()
+    if flyBodyVelocity then
+        flyBodyVelocity:Destroy()
+        flyBodyVelocity = nil
+    end
+    if flyBodyGyro then
+        flyBodyGyro:Destroy()
+        flyBodyGyro = nil
+    end
+end
 
 MainTab:CreateToggle({
-    Name = "Bật Fly (Nhấn F để tắt bật)",
+    Name = "Bật Fly (Dùng WSAD + Space/Shift để bay lên/xuống)",
     CurrentValue = false,
     Flag = "FlyToggle",
     Callback = function(Value)
         flying = Value
-        local char = player.Character or player.CharacterAdded:Wait()
-        local hrp = char:WaitForChild("HumanoidRootPart")
         if flying then
-            bodyVelocity = Instance.new("BodyVelocity")
-            bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-            bodyVelocity.Parent = hrp
+            startFly()
         else
-            if bodyVelocity then
-                bodyVelocity:Destroy()
-                bodyVelocity = nil
-            end
+            stopFly()
         end
     end
 })
@@ -134,61 +153,36 @@ Players.PlayerRemoving:Connect(function(p)
     removeESP(p)
 end)
 
--- Aim Enemy Toggle
-local aimEnabled = false
-local aimKey = Enum.KeyCode.E
-local Camera = workspace.CurrentCamera
+-- Noclip Toggle
+local noclipEnabled = false
 
 MainTab:CreateToggle({
-    Name = "Bật Aim Enemy (Game Arsenal)",
+    Name = "Bật Noclip",
     CurrentValue = false,
-    Flag = "AimToggle",
-    Callback = function(value)
-        aimEnabled = value
+    Flag = "NoclipToggle",
+    Callback = function(Value)
+        noclipEnabled = Value
     end
 })
 
-local function getNearestEnemy()
-    local nearest, nearestDist
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= player and p.Character and p.Character:FindFirstChild("Head") then
-            local headPos = p.Character.Head.Position
-            local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
-            if onScreen then
-                local dist = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
-                if not nearestDist or dist < nearestDist then
-                    nearestDist = dist
-                    nearest = p.Character.Head
+RunService.Stepped:Connect(function()
+    local char = player.Character
+    if char then
+        for _, part in pairs(char:GetChildren()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                if noclipEnabled then
+                    part.CanCollide = false
+                else
+                    part.CanCollide = true
                 end
             end
         end
-    end
-    return nearest
-end
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == aimKey then
-        aimEnabled = not aimEnabled
-        MainTab:FindFirstChild("AimToggle").Flag = aimEnabled
     end
 end)
 
+-- Sự kiện kiểm soát bay
 RunService.Heartbeat:Connect(function()
-    -- Infinite Jump
-    if infiniteJumpEnabled then
-        local char = player.Character
-        if char then
-            local humanoid = char:FindFirstChildOfClass("Humanoid")
-            if humanoid then
-                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                end
-            end
-        end
-    end
-
-    -- Fly
-    if flying and bodyVelocity then
+    if flying and flyBodyVelocity and flyBodyGyro then
         local char = player.Character
         if char then
             local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -206,20 +200,30 @@ RunService.Heartbeat:Connect(function()
                 if UserInputService:IsKeyDown(Enum.KeyCode.D) then
                     moveVec = moveVec + workspace.CurrentCamera.CFrame.RightVector
                 end
-                if moveVec.Magnitude > 0 then
-                    bodyVelocity.Velocity = moveVec.Unit * flySpeed
-                else
-                    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+
+                flyBodyVelocity.Velocity = moveVec.Unit * flySpeed
+
+                -- Bay lên và xuống
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                    flyBodyVelocity.Velocity = flyBodyVelocity.Velocity + Vector3.new(0, flySpeed, 0)
+                elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                    flyBodyVelocity.Velocity = flyBodyVelocity.Velocity - Vector3.new(0, flySpeed, 0)
                 end
+
+                flyBodyGyro.CFrame = workspace.CurrentCamera.CFrame
             end
         end
     end
-
-    -- Aim Enemy
-    if aimEnabled then
-        local target = getNearestEnemy()
-        if target then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Position)
+    -- Infinite Jump
+    if infiniteJumpEnabled then
+        local char = player.Character
+        if char then
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                end
+            end
         end
     end
 end)
