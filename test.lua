@@ -18,33 +18,37 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
--- Thêm logo bật menu
-local logoAssetId = "rbxassetid://11228653710"
-
-local LogoButton = Instance.new("ImageButton")
-LogoButton.Name = "LogoButton"
-LogoButton.BackgroundTransparency = 1
-LogoButton.Size = UDim2.new(0, 48, 0, 48)
-LogoButton.Position = UDim2.new(0, 10, 0, 10)
-LogoButton.Image = logoAssetId
-LogoButton.Parent = game:GetService("CoreGui")
-
-local uiVisible = true
-LogoButton.MouseButton1Click:Connect(function()
-    uiVisible = not uiVisible
-    if uiVisible then
-        Window:Open()
-    else
-        Window:Close()
-    end
-end)
-
 local Tabs = {
     Main = Window:AddTab({ Title = "Main", Icon = "box" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 
 local Options = Fluent.Options
+
+-- Toggle bật tắt menu trong tab Main
+local showMenu = true
+local MenuToggle = Tabs.Main:AddToggle("MenuToggle", {
+    Title = "Bật/tắt Menu",
+    Default = true,
+    Callback = function(val)
+        if val then
+            Window:Open()
+            showMenu = true
+        else
+            Window:Close()
+            showMenu = false
+        end
+    end
+})
+
+-- Đồng bộ trạng thái lúc mở đầu
+if MenuToggle:GetValue() then
+    Window:Open()
+    showMenu = true
+else
+    Window:Close()
+    showMenu = false
+end
 
 -- Speed input
 local defaultWalkSpeed = 16
@@ -94,7 +98,7 @@ Tabs.Main:AddButton({
     end
 })
 
--- Bật tắt Infinite Jump
+-- Infinite Jump toggle
 local infiniteJumpEnabled = false
 Tabs.Main:AddToggle("InfiniteJumpToggle", {
     Title = "Bật Infinite Jump",
@@ -233,7 +237,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Fly Mode (mobile friendly, không fly up/down)
+-- Fly Mode (mobile friendly)
 local flying = false
 local flySpeed = 50
 local bodyVelocity, bodyGyro
@@ -290,7 +294,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Teleport toggles
+-- Teleport toggle
 local teleportUp = false
 local teleportDown = false
 local teleportHeight = 50
@@ -327,7 +331,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Setup SaveManager and InterfaceManager for config saving
+-- Setup SaveManager and InterfaceManager for config saving and UI management
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 
