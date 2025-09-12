@@ -10,7 +10,7 @@ local Camera = workspace.CurrentCamera
 
 local Window = Fluent:CreateWindow({
     Title = "Ultimate Script UI",
-    SubTitle = "by User",
+    SubTitle = "Script By Danhcng",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -18,35 +18,56 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
+-- Toggle bật tắt menu ngoài UI (nút bấm)
+local ToggleGui = Instance.new("ScreenGui")
+local Toggle = Instance.new("TextButton")
+local UICorner = Instance.new("UICorner")
+
+ToggleGui.Name = "ToggleGui"
+ToggleGui.Parent = player:WaitForChild("PlayerGui")
+ToggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ToggleGui.ResetOnSpawn = false
+
+UICorner.Parent = Toggle
+Toggle.Name = "Toggle"
+Toggle.Parent = ToggleGui
+Toggle.BackgroundColor3 = Color3.fromRGB(29, 29, 29)
+Toggle.Position = UDim2.new(0, 10, 0, 200) -- bạn chỉnh vị trí tùy ý
+Toggle.Size = UDim2.new(0, 80, 0, 38)
+Toggle.Font = Enum.Font.SourceSans
+Toggle.Text = "Close Gui"
+Toggle.TextColor3 = Color3.fromRGB(203, 122, 49)
+Toggle.TextSize = 19
+Toggle.Draggable = true
+
+local isOpen = true
+
+local function updateToggleText()
+    if isOpen then
+        Toggle.Text = "Close Gui"
+    else
+        Toggle.Text = "Open Gui"
+    end
+end
+
+updateToggleText()
+
+Toggle.MouseButton1Click:Connect(function()
+    isOpen = not isOpen
+    if isOpen then
+        Window:Open()
+    else
+        Window:Close()
+    end
+    updateToggleText()
+end)
+
 local Tabs = {
     Main = Window:AddTab({ Title = "Main", Icon = "box" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 
 local Options = Fluent.Options
-
--- Toggle bật tắt menu thay thế logo
-local uiVisible = true
-
-local function updateMenuVisibility(visible)
-    if visible then
-        Window:Open()
-    else
-        Window:Close()
-    end
-    uiVisible = visible
-end
-
-local MenuToggle = Tabs.Main:AddToggle("MenuToggle", {
-    Title = "Bật/tắt Menu",
-    Default = true,
-    Callback = function(val)
-        updateMenuVisibility(val)
-    end
-})
-
--- Đồng bộ trạng thái lúc bắt đầu
-updateMenuVisibility(MenuToggle:GetValue())
 
 -- Speed input
 local defaultWalkSpeed = 16
@@ -329,7 +350,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Setup SaveManager and InterfaceManager for config saving and UI management
+-- Setup SaveManager and InterfaceManager for config saving
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 
