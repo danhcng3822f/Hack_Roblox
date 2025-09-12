@@ -25,30 +25,28 @@ local Tabs = {
 
 local Options = Fluent.Options
 
--- Toggle bật tắt menu trong tab Main
-local showMenu = true
+-- Toggle bật tắt menu thay thế logo
+local uiVisible = true
+
+local function updateMenuVisibility(visible)
+    if visible then
+        Window:Open()
+    else
+        Window:Close()
+    end
+    uiVisible = visible
+end
+
 local MenuToggle = Tabs.Main:AddToggle("MenuToggle", {
     Title = "Bật/tắt Menu",
     Default = true,
     Callback = function(val)
-        if val then
-            Window:Open()
-            showMenu = true
-        else
-            Window:Close()
-            showMenu = false
-        end
+        updateMenuVisibility(val)
     end
 })
 
--- Đồng bộ trạng thái lúc mở đầu
-if MenuToggle:GetValue() then
-    Window:Open()
-    showMenu = true
-else
-    Window:Close()
-    showMenu = false
-end
+-- Đồng bộ trạng thái lúc bắt đầu
+updateMenuVisibility(MenuToggle:GetValue())
 
 -- Speed input
 local defaultWalkSpeed = 16
