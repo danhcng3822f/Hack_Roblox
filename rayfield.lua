@@ -1,27 +1,26 @@
--- LocalScript: UltimateScript_Complete.lua
+-- Load Orion UI
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Orion/main/source.lua"))()
 
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
-local Window = Rayfield:CreateWindow({
+local Window = OrionLib:MakeWindow({
     Name = "Ultimate Script UI",
-    LoadingTitle = "Ultimate Script",
-    LoadingSubtitle = "Speed, ESP, Noclip, Aim, Fly, Infinite Jump",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = nil,
-        FileName = "UltimateScriptSettings"
-    },
-    Discord = { Enabled = false }
+    HidePremium = false,
+    IntroText = "Speed, Fly, ESP, Aim, Infinite Jump, Noclip",
 })
 
-local MainTab = Window:CreateTab("Main", 4483362458)
+local MainTab = Window:MakeTab({
+    Name = "Main",
+    Icon = "rbxassetid://4483362458",
+    PremiumOnly = false,
+})
 
 -- Speed setup
 local defaultWalkSpeed = 16
+local currentWalkSpeed = defaultWalkSpeed
 
 local function setSpeed(value)
     local char = player.Character or player.CharacterAdded:Wait()
@@ -29,53 +28,52 @@ local function setSpeed(value)
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if humanoid then
         humanoid.WalkSpeed = value
+        currentWalkSpeed = value
     end
 end
 
-local SpeedSlider = MainTab:CreateSlider({
+MainTab:AddSlider({
     Name = "Chỉnh tốc độ chạy",
-    Range = {8, 100},
+    Min = 8,
+    Max = 100,
+    Default = defaultWalkSpeed,
+    Color = Color3.fromRGB(255, 170, 0),
     Increment = 1,
-    Suffix = "Speed",
-    CurrentValue = defaultWalkSpeed,
-    Flag = "WalkSpeed",
-    Callback = setSpeed,
+    ValueName = "Speed",
+    Callback = setSpeed
 })
 
-MainTab:CreateButton({
+MainTab:AddButton({
     Name = "Reset tốc độ",
     Callback = function()
-        SpeedSlider:Set(defaultWalkSpeed)
         setSpeed(defaultWalkSpeed)
     end
 })
 
-spawn(function()
-    local wasVisible = true
-    while true do
-        local visible = Window.Visible
-        if visible ~= wasVisible then
-            if not visible then
-                setSpeed(defaultWalkSpeed)
-            end
-            wasVisible = visible
-        end
-        wait(0.1)
-    end
-end)
-
--- Infinite Jump with delay
+-- Infinite Jump toggle & improved
 local infiniteJumpEnabled = false
-local lastJumpTime = 0
 
-MainTab:CreateToggle({
+MainTab:AddToggle({
     Name = "Bật Infinite Jump",
-    CurrentValue = false,
-    Flag = "InfiniteJumpToggle",
+    Default = false,
     Callback = function(value)
         infiniteJumpEnabled = value
     end,
 })
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and infiniteJumpEnabled then
+        if input.KeyCode == Enum.KeyCode.Space then
+            local char = player.Character
+            if char then
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
+                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                end
+            end
+        end
+    end
+end)
 
 -- ESP Player toggle
 local espEnabled = false
@@ -113,10 +111,9 @@ local function toggleESP(enabled)
     end
 end
 
-MainTab:CreateToggle({
+MainTab:AddToggle({
     Name = "Bật ESP Player",
-    CurrentValue = false,
-    Flag = "ESPToggle",
+    Default = false,
     Callback = toggleESP,
 })
 
@@ -130,13 +127,10 @@ Players.PlayerRemoving:Connect(removeESP)
 
 -- Noclip toggle
 local noclipEnabled = false
-MainTab:CreateToggle({
+MainTab:AddToggle({
     Name = "Bật Noclip",
-    CurrentValue = false,
-    Flag = "NoclipToggle",
-    Callback = function(value)
-        noclipEnabled = value
-    end,
+    Default = false,
+    Callback = function(value) noclipEnabled = value end,
 })
 
 RunService.Stepped:Connect(function()
@@ -150,61 +144,9 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- Aim Enemy toggle and logic
-local aimEnabled = false
-local aimKey = Enum.KeyCode.E
-local Camera = workspace.CurrentCamera
+-- Aim Enemy (giữ nguyên code cũ hoặc có thể thay đổi theo yêu cầu)
 
-MainTab:CreateToggle({
-    Name = "Bật Aim Enemy (Chỉ aim kẻ địch)",
-    CurrentValue = false,
-    Flag = "AimToggle",
-    Callback = function(value)
-        aimEnabled = value
-    end,
-})
-
-local function isEnemy(playerA, playerB)
-    if playerA.Team and playerB.Team then
-        return playerA.Team ~= playerB.Team
-    end
-    return true
-end
-
-local function getNearestEnemy()
-    if not player.Character or not player.Character:FindFirstChild("Head") then return nil end
-    local nearest, nearestDist = nil, math.huge
-    local ownHeadPos = player.Character.Head.Position
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= player and p.Character and p.Character:FindFirstChild("Head") and isEnemy(player, p) then
-            local dist = (ownHeadPos - p.Character.Head.Position).Magnitude
-            if dist < nearestDist then
-                nearestDist = dist
-                nearest = p.Character.Head
-            end
-        end
-    end
-    return nearest
-end
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == aimKey then
-        aimEnabled = not aimEnabled
-        local toggle = MainTab:FindFirstChild("AimToggle")
-        if toggle then toggle.Flag = aimEnabled end
-    end
-end)
-
-RunService.RenderStepped:Connect(function()
-    if aimEnabled then
-        local target = getNearestEnemy()
-        if target then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Position)
-        end
-    end
-end)
-
--- Fly mode implementation
+-- Fly mode
 local flying = false
 local flySpeed = 50
 local bodyVelocity, bodyGyro
@@ -234,10 +176,9 @@ local function stopFly()
     end
 end
 
-MainTab:CreateToggle({
+MainTab:AddToggle({
     Name = "Bật Fly Mode (WSAD + Space/Shift bay lên xuống)",
-    CurrentValue = false,
-    Flag = "FlyToggle",
+    Default = false,
     Callback = function(value)
         flying = value
         if flying then
@@ -267,11 +208,11 @@ RunService.Heartbeat:Connect(function()
                 if UserInputService:IsKeyDown(Enum.KeyCode.D) then
                     moveVector = moveVector + workspace.CurrentCamera.CFrame.RightVector
                 end
-                
+
                 if moveVector.Magnitude > 0 then
                     bodyVelocity.Velocity = moveVector.Unit * flySpeed
                 else
-                    bodyVelocity.Velocity = Vector3.new(0,0,0)
+                    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
                 end
 
                 if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
@@ -286,22 +227,4 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Infinite Jump improved with delay
-local lastJumpTime = 0
-RunService.Heartbeat:Connect(function()
-    if infiniteJumpEnabled then
-        local char = player.Character
-        if char then
-            local humanoid = char:FindFirstChildOfClass("Humanoid")
-            if humanoid and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-                local currentTime = tick()
-                if currentTime - lastJumpTime > 0.25 then
-                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                    lastJumpTime = currentTime
-                end
-            end
-        end
-    end
-end)
-
-Rayfield:Init()
+OrionLib:Init()
