@@ -4,22 +4,35 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
+local themeColor = Color3.fromRGB(144, 238, 144) -- màu xanh lá nhạt
+
 local Window = Rayfield:CreateWindow({
     Name = "Ultimate Script UI",
     LoadingTitle = "Ultimate Script",
-    LoadingSubtitle = "Speed, ESP, Noclip, Aim, Fly, Infinite Jump, Teleport",
+    LoadingSubtitle = "Speed, JumpPower, ESP, Noclip, Aim, Fly, Infinite Jump, Teleport",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = nil,
         FileName = "UltimateScriptSettings"
     },
-    Discord = { Enabled = false }
+    Discord = { Enabled = false },
+    Theme = {
+        Accent = themeColor,
+        MinAccent = themeColor,
+        Toggle = themeColor,
+        Info = themeColor,
+        Success = themeColor,
+        Error = themeColor,
+        Background = Color3.fromRGB(245, 255, 245), -- nền sáng nhẹ xanh lá
+        TextColor = Color3.fromRGB(0, 0, 0),
+    }
 })
 
 local MainTab = Window:CreateTab("Main", 4483362458)
 
--- Speed Input
+-- Speed Setup
 local defaultWalkSpeed = 16
+local currentWalkSpeed = defaultWalkSpeed
 
 local function setSpeed(value)
     local char = player.Character or player.CharacterAdded:Wait()
@@ -29,8 +42,10 @@ local function setSpeed(value)
     if humanoid then
         if numValue and numValue >= 8 and numValue <= 100 then
             humanoid.WalkSpeed = numValue
+            currentWalkSpeed = numValue
         else
             humanoid.WalkSpeed = defaultWalkSpeed
+            currentWalkSpeed = defaultWalkSpeed
         end
     end
 end
@@ -49,7 +64,41 @@ MainTab:CreateButton({
     end
 })
 
--- Infinite Jump Toggle
+-- JumpPower với input
+local defaultJumpPower = 50
+local currentJumpPower = defaultJumpPower
+
+local function setJumpPower(value)
+    local char = player.Character or player.CharacterAdded:Wait()
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    local numValue = tonumber(value)
+    if humanoid then
+        if numValue and numValue >= 20 and numValue <= 200 then
+            humanoid.JumpPower = numValue
+            currentJumpPower = numValue
+        else
+            humanoid.JumpPower = defaultJumpPower
+            currentJumpPower = defaultJumpPower
+        end
+    end
+end
+
+MainTab:CreateInput({
+    Name = "Chỉnh Jump Power",
+    PlaceholderText = tostring(defaultJumpPower),
+    RemoveTextAfterFocusLost = false,
+    Callback = setJumpPower,
+})
+
+MainTab:CreateButton({
+    Name = "Reset Jump Power",
+    Callback = function()
+        setJumpPower(tostring(defaultJumpPower))
+    end
+})
+
+-- Infinite Jump
 local infiniteJumpEnabled = false
 MainTab:CreateToggle({
     Name = "Bật Infinite Jump",
@@ -80,8 +129,8 @@ local function addESP(p)
     if p ~= player and p.Character and not espHighlights[p] then
         local highlight = Instance.new("Highlight")
         highlight.Adornee = p.Character
-        highlight.FillColor = Color3.fromRGB(255, 0, 0)
-        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        highlight.FillColor = Color3.fromRGB(144, 238, 144)
+        highlight.OutlineColor = Color3.fromRGB(0, 100, 0)
         highlight.Name = "ESP_Highlight"
         highlight.Parent = p.Character
         espHighlights[p] = highlight
@@ -129,7 +178,9 @@ MainTab:CreateToggle({
     Name = "Bật Noclip",
     CurrentValue = false,
     Flag = "NoclipToggle",
-    Callback = function(v) noclipEnabled = v end,
+    Callback = function(value)
+        noclipEnabled = value
+    end,
 })
 
 RunService.Stepped:Connect(function()
@@ -152,8 +203,8 @@ MainTab:CreateToggle({
     Name = "Bật Aim Enemy (Chỉ aim kẻ địch)",
     CurrentValue = false,
     Flag = "AimToggle",
-    Callback = function(v)
-        aimEnabled = v
+    Callback = function(value)
+        aimEnabled = value
     end,
 })
 
@@ -197,10 +248,8 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Fly Mode (mobile-friendly)
+-- Fly Mode (di chuyển theo camera, không có flyUp/flyDown toggle)
 local flying = false
-local flyUp = false
-local flyDown = false
 local flySpeed = 50
 local bodyVelocity, bodyGyro
 
@@ -235,34 +284,12 @@ MainTab:CreateToggle({
     Flag = "FlyToggle",
     Callback = function(value)
         flying = value
-        flyUp = false
-        flyDown = false
         if flying then
             startFly()
         else
             stopFly()
         end
-    end
-})
-
-MainTab:CreateToggle({
-    Name = "Bay lên (cho mobile)",
-    CurrentValue = false,
-    Flag = "FlyUpToggle",
-    Callback = function(value)
-        flyUp = value
-        if value then flyDown = false end
-    end
-})
-
-MainTab:CreateToggle({
-    Name = "Bay xuống (cho mobile)",
-    CurrentValue = false,
-    Flag = "FlyDownToggle",
-    Callback = function(value)
-        flyDown = value
-        if value then flyUp = false end
-    end
+    end,
 })
 
 RunService.Heartbeat:Connect(function()
@@ -271,15 +298,10 @@ RunService.Heartbeat:Connect(function()
         if char then
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if hrp then
-                -- Di chuyển theo hướng camera với tốc độ thấp hơn để dễ dàng kiểm soát trên mobile
                 local moveVector = workspace.CurrentCamera.CFrame.LookVector * 0.5
                 bodyVelocity.Velocity = moveVector * flySpeed
 
-                if flyUp then
-                    bodyVelocity.Velocity = bodyVelocity.Velocity + Vector3.new(0, flySpeed, 0)
-                elseif flyDown then
-                    bodyVelocity.Velocity = bodyVelocity.Velocity - Vector3.new(0, flySpeed, 0)
-                end
+                -- Không còn flyUp/flyDown
 
                 bodyGyro.CFrame = workspace.CurrentCamera.CFrame
             end
