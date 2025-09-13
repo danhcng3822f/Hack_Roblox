@@ -3,7 +3,7 @@ repeat task.wait(0.25) until game:IsLoaded();
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
--- Nút ImageButton toggle menu
+-- Nút ImageButton toggle menu logo mới, kích thước 60x60
 local ScreenGui = Instance.new("ScreenGui")
 local ImageButton = Instance.new("ImageButton")
 local UICorner = Instance.new("UICorner")
@@ -14,10 +14,10 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ImageButton.Parent = ScreenGui
 ImageButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 ImageButton.BorderSizePixel = 0
-ImageButton.Position = UDim2.new(0.10615778, 0, 0.16217947, 0)
-ImageButton.Size = UDim2.new(0, 40, 0, 40)
+ImageButton.Position = UDim2.new(0.1, 0, 0.15, 0)
+ImageButton.Size = UDim2.new(0, 60, 0, 60)
 ImageButton.Draggable = true
-ImageButton.Image = "http://www.roblox.com/asset/?id=103381615661534"
+ImageButton.Image = "rbxassetid://117785786479587"
 
 UICorner.CornerRadius = UDim.new(1, 10)
 UICorner.Parent = ImageButton
@@ -29,14 +29,13 @@ ImageButton.MouseButton1Down:Connect(function()
     VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.End, false, game)
 end)
 
--- Fluent UI init
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 
 local Window = Fluent:CreateWindow({
-    Title = "Fluent " .. Fluent.Version,
-    SubTitle = "by dawid",
-    TabWidth = 160,
-    Size = UDim2.fromOffset(580, 460),
+    Title = "Hacker Script",
+    SubTitle = "By Danhcng",
+    TabWidth = 200,
+    Size = UDim2.fromOffset(480, 350),
     Acrylic = true,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.End
@@ -49,58 +48,45 @@ local Tabs = {
 
 local Options = Fluent.Options
 
--- WalkSpeed
 local defaultWalkSpeed = 16
-Tabs.Main:AddInput("WalkSpeedInput", {
-    Title = "Chỉnh tốc độ chạy",
-    Placeholder = tostring(defaultWalkSpeed),
+-- Speed slider with description
+Tabs.Main:AddSlider("WalkSpeedSlider", {
+    Title = "Speed",
+    Description = "Speed", -- mô tả
+    Min = 8,
+    Max = 100,
+    Default = defaultWalkSpeed,
+    Rounding = 0,
     Callback = function(val)
         local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        local numVal = tonumber(val)
-        if humanoid and numVal and numVal >= 8 and numVal <= 100 then
-            humanoid.WalkSpeed = numVal
-        elseif humanoid then
-            humanoid.WalkSpeed = defaultWalkSpeed
+        if humanoid then
+            humanoid.WalkSpeed = val
         end
     end
 })
 
-Tabs.Main:AddButton({
-    Title = "Reset tốc độ",
-    Callback = function()
-        local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then humanoid.WalkSpeed = defaultWalkSpeed end
-    end
-})
-
--- JumpPower
 local defaultJumpPower = 50
-Tabs.Main:AddInput("JumpPowerInput", {
-    Title = "Chỉnh Jump Power",
-    Placeholder = tostring(defaultJumpPower),
+-- Jump Power slider with description
+Tabs.Main:AddSlider("JumpPowerSlider", {
+    Title = "Jump Power",
+    Description = "Jump Power", -- mô tả
+    Min = 20,
+    Max = 200,
+    Default = defaultJumpPower,
+    Rounding = 0,
     Callback = function(val)
         local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        local numVal = tonumber(val)
-        if humanoid and numVal and numVal >= 20 and numVal <= 200 then
-            humanoid.JumpPower = numVal
-        elseif humanoid then
-            humanoid.JumpPower = defaultJumpPower
+        if humanoid then
+            humanoid.JumpPower = val
         end
     end
 })
 
-Tabs.Main:AddButton({
-    Title = "Reset Jump Power",
-    Callback = function()
-        local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then humanoid.JumpPower = defaultJumpPower end
-    end
-})
-
--- Infinite Jump
+-- Infinite Jump toggle with description
 local infiniteJumpEnabled = false
 Tabs.Main:AddToggle("InfiniteJumpToggle", {
-    Title = "Bật Infinite Jump",
+    Title = "Infinite Jump",
+    Description = "Infinite Jump", -- mô tả
     Default = false,
     Callback = function(val)
         infiniteJumpEnabled = val
@@ -110,13 +96,13 @@ Tabs.Main:AddToggle("InfiniteJumpToggle", {
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and infiniteJumpEnabled and input.KeyCode == Enum.KeyCode.Space then
         local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
+        if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping and humanoid:GetState() ~= Enum.HumanoidStateType.Freefall then
             humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
         end
     end
 end)
 
--- ESP
+-- ESP toggle with description
 local espEnabled = false
 local espHighlights = {}
 
@@ -140,7 +126,8 @@ local function removeESP(p)
 end
 
 Tabs.Main:AddToggle("ESPToggle", {
-    Title = "Bật ESP Player",
+    Title = "Esp",
+    Description = "esp player",
     Default = false,
     Callback = function(val)
         espEnabled = val
@@ -164,10 +151,10 @@ end)
 
 game.Players.PlayerRemoving:Connect(removeESP)
 
--- Noclip
+-- Noclip toggle without description (giữ nguyên cũ)
 local noclipEnabled = false
 Tabs.Main:AddToggle("NoclipToggle", {
-    Title = "Bật Noclip",
+    Title = "Noclip",
     Default = false,
     Callback = function(val)
         noclipEnabled = val
@@ -185,12 +172,13 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- Aim (phím T)
+-- Aim toggle with description
 local aimEnabled = false
 local aimKey = Enum.KeyCode.T
 
 Tabs.Main:AddToggle("AimToggle", {
-    Title = "Bật Aim Enemy (Chỉ aim kẻ địch)",
+    Title = "Aim",
+    Description = "aim player",
     Default = false,
     Callback = function(val)
         aimEnabled = val
@@ -235,7 +223,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Fly Mode
+-- Fly toggle with description
 local flying = false
 local flySpeed = 50
 local bodyVelocity, bodyGyro
@@ -266,7 +254,8 @@ local function stopFly()
 end
 
 Tabs.Main:AddToggle("FlyToggle", {
-    Title = "Bật Fly Mode (Mobile friendly)",
+    Title = "Fly",
+    Description = "dành cho mobile",
     Default = false,
     Callback = function(val)
         flying = val
@@ -292,26 +281,34 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Teleport
+-- Teleport Up toggle with description
 local teleportUp = false
-local teleportDown = false
 local teleportHeight = 50
 
 Tabs.Main:AddToggle("TeleportUpToggle", {
-    Title = "Dịch chuyển lên trên trời (Giữ bật)",
+    Title = "Tele Up",
+    Description = "teleport lên trời",
     Default = false,
     Callback = function(val)
         teleportUp = val
-        if teleportUp then teleportDown = false end
+        if teleportUp then
+            teleportDown = false
+        end
     end
 })
 
+-- Teleport Down toggle with description
+local teleportDown = false
+
 Tabs.Main:AddToggle("TeleportDownToggle", {
-    Title = "Dịch chuyển xuống lòng đất (Giữ bật)",
+    Title = "Tele Down",
+    Description = "teleport xuống dưới đất",
     Default = false,
     Callback = function(val)
         teleportDown = val
-        if teleportDown then teleportUp = false end
+        if teleportDown then
+            teleportUp = false
+        end
     end
 })
 
@@ -346,7 +343,6 @@ task.delay(1, function()
     InterfaceManager:BuildInterfaceSection(Tabs.Settings)
     SaveManager:BuildConfigSection(Tabs.Settings)
 
-    -- Mặc định phím MinimizeKey là End, tránh hiển thị "..."
     local configPath = "FluentScriptHub/specific-game"
     local config = SaveManager:LoadConfig(configPath)
     if config then
@@ -360,8 +356,8 @@ end)
 Window:SelectTab(1)
 
 Fluent:Notify({
-    Title = "Fluent UI",
-    Content = "Ultimate Script đã được tải!",
+    Title = "Hacker Script",
+    Content = "By Danhcng đã tải!",
     Duration = 6
 })
 
