@@ -2,6 +2,10 @@ repeat task.wait(0.25) until game:IsLoaded();
 
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+
+local LocalPlayer = Players.LocalPlayer
 
 -- Nút ImageButton toggle menu logo mới, kích thước 60x60
 local ScreenGui = Instance.new("ScreenGui")
@@ -42,23 +46,24 @@ local Window = Fluent:CreateWindow({
 })
 
 local Tabs = {
-    Main = Window:AddTab({ Title = "Main", Icon = "box" }),
+    LocalPlayer = Window:AddTab({ Title = "LocalPlayer", Icon = "box" }),
+    Server = Window:AddTab({ Title = "Server", Icon = "server" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 
 local Options = Fluent.Options
 
+-- LocalPlayer Tab --
+
 local defaultWalkSpeed = 16
--- Speed slider with description
-Tabs.Main:AddSlider("WalkSpeedSlider", {
+Tabs.LocalPlayer:AddSlider("WalkSpeedSlider", {
     Title = "Speed",
-    Description = "Speed",
     Min = 8,
     Max = 100,
     Default = defaultWalkSpeed,
     Rounding = 0,
     Callback = function(val)
-        local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if humanoid then
             humanoid.WalkSpeed = val
         end
@@ -66,8 +71,7 @@ Tabs.Main:AddSlider("WalkSpeedSlider", {
 })
 
 local defaultJumpPower = 50
--- Jump Power slider with description
-Tabs.Main:AddSlider("JumpPowerSlider", {
+Tabs.LocalPlayer:AddSlider("JumpPowerSlider", {
     Title = "Jump Power",
     Description = "Jump Power",
     Min = 20,
@@ -75,16 +79,15 @@ Tabs.Main:AddSlider("JumpPowerSlider", {
     Default = defaultJumpPower,
     Rounding = 0,
     Callback = function(val)
-        local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if humanoid then
             humanoid.JumpPower = val
         end
     end
 })
 
--- Infinite Jump toggle with description
 local infiniteJumpEnabled = false
-Tabs.Main:AddToggle("InfiniteJumpToggle", {
+Tabs.LocalPlayer:AddToggle("InfiniteJumpToggle", {
     Title = "Infinite Jump",
     Description = "Infinite Jump",
     Default = false,
@@ -95,19 +98,18 @@ Tabs.Main:AddToggle("InfiniteJumpToggle", {
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and infiniteJumpEnabled and input.KeyCode == Enum.KeyCode.Space then
-        local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping and humanoid:GetState() ~= Enum.HumanoidStateType.Freefall then
             humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
         end
     end
 end)
 
--- ESP toggle with description
 local espEnabled = false
 local espHighlights = {}
 
 local function addESP(p)
-    if p ~= game.Players.LocalPlayer and p.Character and not espHighlights[p] then
+    if p ~= LocalPlayer and p.Character and not espHighlights[p] then
         local highlight = Instance.new("Highlight")
         highlight.Adornee = p.Character
         highlight.FillColor = Color3.fromRGB(255, 0, 0)
@@ -125,36 +127,36 @@ local function removeESP(p)
     end
 end
 
-Tabs.Main:AddToggle("ESPToggle", {
+Tabs.LocalPlayer:AddToggle("ESPToggle", {
     Title = "Esp",
     Description = "esp player",
     Default = false,
     Callback = function(val)
         espEnabled = val
         if espEnabled then
-            for _, p in pairs(game.Players:GetPlayers()) do
+            for _, p in pairs(Players:GetPlayers()) do
                 addESP(p)
             end
         else
-            for _, p in pairs(game.Players:GetPlayers()) do
+            for _, p in pairs(Players:GetPlayers()) do
                 removeESP(p)
             end
         end
     end
 })
 
-game.Players.PlayerAdded:Connect(function(p)
+Players.PlayerAdded:Connect(function(p)
     p.CharacterAdded:Connect(function()
         if espEnabled then addESP(p) end
     end)
 end)
 
-game.Players.PlayerRemoving:Connect(removeESP)
+Players.PlayerRemoving:Connect(removeESP)
 
--- Noclip toggle without description
 local noclipEnabled = false
-Tabs.Main:AddToggle("NoclipToggle", {
+Tabs.LocalPlayer:AddToggle("NoclipToggle", {
     Title = "Noclip",
+    Description = "đi xuyên vật thể",
     Default = false,
     Callback = function(val)
         noclipEnabled = val
@@ -162,7 +164,7 @@ Tabs.Main:AddToggle("NoclipToggle", {
 })
 
 RunService.Stepped:Connect(function()
-    local char = game.Players.LocalPlayer.Character
+    local char = LocalPlayer.Character
     if char then
         for _, part in pairs(char:GetChildren()) do
             if part:IsA("BasePart") then
@@ -172,13 +174,11 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- Aim toggle with description
 local aimEnabled = false
 local aimKey = Enum.KeyCode.T
-
-Tabs.Main:AddToggle("AimToggle", {
+Tabs.LocalPlayer:AddToggle("AimToggle", {
     Title = "Aim",
-    Description = "aim player",
+    Description = "aim tâm vào player, chỉ phù hợp với game bắn súng",
     Default = false,
     Callback = function(val)
         aimEnabled = val
@@ -193,11 +193,11 @@ local function isEnemy(p1, p2)
 end
 
 local function getNearestEnemy()
-    if not game.Players.LocalPlayer.Character or not game.Players.LocalPlayer.Character:FindFirstChild("Head") then return nil end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return nil end
     local nearest, nearestDist = nil, math.huge
-    local ownHeadPos = game.Players.LocalPlayer.Character.Head.Position
-    for _, p in pairs(game.Players:GetPlayers()) do
-        if p ~= game.Players.LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and isEnemy(game.Players.LocalPlayer, p) then
+    local ownHeadPos = LocalPlayer.Character.Head.Position
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and isEnemy(LocalPlayer, p) then
             local dist = (ownHeadPos - p.Character.Head.Position).Magnitude
             if dist < nearestDist then
                 nearestDist = dist
@@ -223,13 +223,12 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Fly toggle with description
 local flying = false
 local flySpeed = 50
 local bodyVelocity, bodyGyro
 
 local function startFly()
-    local char = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
     bodyVelocity = Instance.new("BodyVelocity")
     bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
@@ -253,7 +252,7 @@ local function stopFly()
     end
 end
 
-Tabs.Main:AddToggle("FlyToggle", {
+Tabs.LocalPlayer:AddToggle("FlyToggle", {
     Title = "Fly",
     Description = "dành cho mobile",
     Default = false,
@@ -269,7 +268,7 @@ Tabs.Main:AddToggle("FlyToggle", {
 
 RunService.Heartbeat:Connect(function()
     if flying and bodyVelocity and bodyGyro then
-        local char = game.Players.LocalPlayer.Character
+        local char = LocalPlayer.Character
         if char then
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if hrp then
@@ -281,11 +280,11 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Teleport Up toggle with description
 local teleportUp = false
+local teleportDown = false
 local teleportHeight = 50
 
-Tabs.Main:AddToggle("TeleportUpToggle", {
+Tabs.LocalPlayer:AddToggle("TeleportUpToggle", {
     Title = "Tele Up",
     Description = "teleport lên trời",
     Default = false,
@@ -297,10 +296,7 @@ Tabs.Main:AddToggle("TeleportUpToggle", {
     end
 })
 
--- Teleport Down toggle with description
-local teleportDown = false
-
-Tabs.Main:AddToggle("TeleportDownToggle", {
+Tabs.LocalPlayer:AddToggle("TeleportDownToggle", {
     Title = "Tele Down",
     Description = "teleport xuống dưới đất",
     Default = false,
@@ -313,7 +309,7 @@ Tabs.Main:AddToggle("TeleportDownToggle", {
 })
 
 RunService.Heartbeat:Connect(function()
-    local char = game.Players.LocalPlayer.Character
+    local char = LocalPlayer.Character
     if char then
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if hrp then
@@ -326,12 +322,12 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Auto Click toggle (không mô tả)
 local autoClickEnabled = false
 local autoClickDelay = 0.1
 
-Tabs.Main:AddToggle("AutoClickToggle", {
+Tabs.LocalPlayer:AddToggle("AutoClickToggle", {
     Title = "Auto Click",
+    Description = "Click như bình thường, không can thiệp",
     Default = false,
     Callback = function(val)
         autoClickEnabled = val
@@ -347,32 +343,64 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- SaveManager & InterfaceManager
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+-- Server Tab --
 
-SaveManager:SetLibrary(Fluent)
-InterfaceManager:SetLibrary(Fluent)
-
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({})
-
-InterfaceManager:SetFolder("FluentScriptHub")
-SaveManager:SetFolder("FluentScriptHub/specific-game")
-
-task.delay(1, function()
-    InterfaceManager:BuildInterfaceSection(Tabs.Settings)
-    SaveManager:BuildConfigSection(Tabs.Settings)
-
-    local configPath = "FluentScriptHub/specific-game"
-    local config = SaveManager:LoadConfig(configPath)
-    if config then
-        if not config.MinimizeKey or config.MinimizeKey == "..." then
-            config.MinimizeKey = "End"
-            SaveManager:SaveConfig(configPath, config)
-        end
+Tabs.Server:AddButton({
+    Title = "Rejoin Server",
+    Callback = function()
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
     end
-end)
+})
+
+-- SaveManager & InterfaceManager section an toàn hơn --
+
+local SaveManagerLib = game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua")
+local SaveManager, InterfaceManager
+
+local success
+success, SaveManager = pcall(loadstring(SaveManagerLib))
+if not success then
+    warn("Failed to load SaveManager")
+    SaveManager = nil
+end
+
+local InterfaceManagerLib = game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua")
+success, InterfaceManager = pcall(loadstring(InterfaceManagerLib))
+if not success then
+    warn("Failed to load InterfaceManager")
+    InterfaceManager = nil
+end
+
+if SaveManager and InterfaceManager then
+    SaveManager:SetLibrary(Fluent)
+    InterfaceManager:SetLibrary(Fluent)
+    
+    SaveManager:IgnoreThemeSettings()
+    SaveManager:SetIgnoreIndexes({})
+    
+    InterfaceManager:SetFolder("FluentScriptHub")
+    SaveManager:SetFolder("FluentScriptHub/specific-game")
+    
+    task.delay(1, function()
+        InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+        SaveManager:BuildConfigSection(Tabs.Settings)
+    
+        local configPath = "FluentScriptHub/specific-game"
+        if SaveManager.LoadConfig then
+            local config = SaveManager:LoadConfig(configPath)
+            if config then
+                if not config.MinimizeKey or config.MinimizeKey == "..." then
+                    config.MinimizeKey = "End"
+                    if SaveManager.SaveConfig then
+                        SaveManager:SaveConfig(configPath, config)
+                    end
+                end
+            end
+        end
+    end)
+else
+    warn("SaveManager or InterfaceManager not loaded, config disabled")
+end
 
 Window:SelectTab(1)
 
