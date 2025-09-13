@@ -1,67 +1,48 @@
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+repeat task.wait(0.25) until game:IsLoaded();
 
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local player = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
+getgenv().ToggleUI = "E" -- Phím dùng để toggle Fluent UI
+
+task.spawn(function()
+    if not getgenv().LoadedMobileUI == true then 
+        getgenv().LoadedMobileUI = true
+        local OpenUI = Instance.new("ScreenGui")
+        local Toggle = Instance.new("TextButton")
+        local UICorner = Instance.new("UICorner")
+
+        OpenUI.Name = "ToggleGui"
+        OpenUI.Parent = game:GetService("CoreGui")
+        OpenUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+        Toggle.Parent = OpenUI
+        Toggle.BackgroundColor3 = Color3.fromRGB(203, 122, 49)
+        Toggle.Position = UDim2.new(0.9, 0, 0.1, 0)
+        Toggle.Size = UDim2.new(0, 50, 0, 50)
+        Toggle.Text = ""
+        Toggle.AutoButtonColor = false
+        Toggle.Selectable = true
+
+        UICorner.Parent = Toggle
+        UICorner.CornerRadius = UDim.new(1, 0) -- Hình tròn
+
+        Toggle.MouseButton1Click:Connect(function()
+            game:GetService("VirtualInputManager"):SendKeyEvent(true, getgenv().ToggleUI, false, game)
+            task.wait()
+            game:GetService("VirtualInputManager"):SendKeyEvent(false, getgenv().ToggleUI, false, game)
+        end)
+    end
+end)
+
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 
 local Window = Fluent:CreateWindow({
-    Title = "Ultimate Script UI",
-    SubTitle = "by User",
+    Title = "Fluent " .. Fluent.Version,
+    SubTitle = "by dawid",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
     Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.LeftAlt  -- Đổi phím minimize để tránh xung đột
+    MinimizeKey = Enum.KeyCode.E -- phím tắt toggle menu
 })
-
--- Toggle nút ngoài UI hình tròn để đóng/mở menu
-local ToggleGui = Instance.new("ScreenGui")
-local Toggle = Instance.new("TextButton")
-local UICorner = Instance.new("UICorner")
-
-ToggleGui.Name = "ToggleGui"
-ToggleGui.Parent = player:WaitForChild("PlayerGui")
-ToggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ToggleGui.ResetOnSpawn = false
-
-Toggle.Name = "Toggle"
-Toggle.Parent = ToggleGui
-Toggle.BackgroundColor3 = Color3.fromRGB(203, 122, 49)
-Toggle.Position = UDim2.new(0, 10, 0.5, -25)
-Toggle.Size = UDim2.new(0, 50, 0, 50)
-Toggle.AutoButtonColor = false
-Toggle.Text = ""
-
-UICorner.Parent = Toggle
-UICorner.CornerRadius = UDim.new(1, 0)
-
-local isOpen = true
-
-local function updateToggleAppearance()
-    if isOpen then
-        Toggle.BackgroundColor3 = Color3.fromRGB(203, 122, 49)
-    else
-        Toggle.BackgroundColor3 = Color3.fromRGB(110, 110, 110)
-    end
-end
-
-local function updateToggleText()
-    if Window.WindowFrame then
-        Window.WindowFrame.Visible = isOpen
-    end
-    updateToggleAppearance()
-end
-
-Toggle.MouseButton1Click:Connect(function()
-    isOpen = not isOpen
-    updateToggleText()
-end)
-
-updateToggleText()
 
 local Tabs = {
     Main = Window:AddTab({ Title = "Main", Icon = "box" }),
@@ -70,13 +51,12 @@ local Tabs = {
 
 local Options = Fluent.Options
 
--- WalkSpeed chỉnh tốc độ chạy
 local defaultWalkSpeed = 16
 Tabs.Main:AddInput("WalkSpeedInput", {
     Title = "Chỉnh tốc độ chạy",
     Placeholder = tostring(defaultWalkSpeed),
     Callback = function(val)
-        local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         local numVal = tonumber(val)
         if humanoid and numVal and numVal >= 8 and numVal <= 100 then
             humanoid.WalkSpeed = numVal
@@ -89,18 +69,17 @@ Tabs.Main:AddInput("WalkSpeedInput", {
 Tabs.Main:AddButton({
     Title = "Reset tốc độ",
     Callback = function()
-        local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if humanoid then humanoid.WalkSpeed = defaultWalkSpeed end
     end
 })
 
--- JumpPower chỉnh lực nhảy
 local defaultJumpPower = 50
 Tabs.Main:AddInput("JumpPowerInput", {
     Title = "Chỉnh Jump Power",
     Placeholder = tostring(defaultJumpPower),
     Callback = function(val)
-        local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         local numVal = tonumber(val)
         if humanoid and numVal and numVal >= 20 and numVal <= 200 then
             humanoid.JumpPower = numVal
@@ -113,12 +92,11 @@ Tabs.Main:AddInput("JumpPowerInput", {
 Tabs.Main:AddButton({
     Title = "Reset Jump Power",
     Callback = function()
-        local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if humanoid then humanoid.JumpPower = defaultJumpPower end
     end
 })
 
--- Infinite Jump toggle
 local infiniteJumpEnabled = false
 Tabs.Main:AddToggle("InfiniteJumpToggle", {
     Title = "Bật Infinite Jump",
@@ -130,19 +108,18 @@ Tabs.Main:AddToggle("InfiniteJumpToggle", {
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and infiniteJumpEnabled and input.KeyCode == Enum.KeyCode.Space then
-        local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
             humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
         end
     end
 end)
 
--- ESP toggle
 local espEnabled = false
 local espHighlights = {}
 
 local function addESP(p)
-    if p ~= player and p.Character and not espHighlights[p] then
+    if p ~= game.Players.LocalPlayer and p.Character and not espHighlights[p] then
         local highlight = Instance.new("Highlight")
         highlight.Adornee = p.Character
         highlight.FillColor = Color3.fromRGB(255, 0, 0)
@@ -166,26 +143,25 @@ Tabs.Main:AddToggle("ESPToggle", {
     Callback = function(val)
         espEnabled = val
         if espEnabled then
-            for _, p in pairs(Players:GetPlayers()) do
+            for _, p in pairs(game.Players:GetPlayers()) do
                 addESP(p)
             end
         else
-            for _, p in pairs(Players:GetPlayers()) do
+            for _, p in pairs(game.Players:GetPlayers()) do
                 removeESP(p)
             end
         end
     end
 })
 
-Players.PlayerAdded:Connect(function(p)
+game.Players.PlayerAdded:Connect(function(p)
     p.CharacterAdded:Connect(function()
         if espEnabled then addESP(p) end
     end)
 end)
 
-Players.PlayerRemoving:Connect(removeESP)
+game.Players.PlayerRemoving:Connect(removeESP)
 
--- Noclip toggle
 local noclipEnabled = false
 Tabs.Main:AddToggle("NoclipToggle", {
     Title = "Bật Noclip",
@@ -196,7 +172,7 @@ Tabs.Main:AddToggle("NoclipToggle", {
 })
 
 RunService.Stepped:Connect(function()
-    local char = player.Character
+    local char = game.Players.LocalPlayer.Character
     if char then
         for _, part in pairs(char:GetChildren()) do
             if part:IsA("BasePart") then
@@ -206,7 +182,6 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- Aim toggle
 local aimEnabled = false
 local aimKey = Enum.KeyCode.E
 
@@ -226,11 +201,11 @@ local function isEnemy(p1, p2)
 end
 
 local function getNearestEnemy()
-    if not player.Character or not player.Character:FindFirstChild("Head") then return nil end
+    if not game.Players.LocalPlayer.Character or not game.Players.LocalPlayer.Character:FindFirstChild("Head") then return nil end
     local nearest, nearestDist = nil, math.huge
-    local ownHeadPos = player.Character.Head.Position
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= player and p.Character and p.Character:FindFirstChild("Head") and isEnemy(player, p) then
+    local ownHeadPos = game.Players.LocalPlayer.Character.Head.Position
+    for _, p in pairs(game.Players:GetPlayers()) do
+        if p ~= game.Players.LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and isEnemy(game.Players.LocalPlayer, p) then
             local dist = (ownHeadPos - p.Character.Head.Position).Magnitude
             if dist < nearestDist then
                 nearestDist = dist
@@ -242,7 +217,7 @@ local function getNearestEnemy()
 end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode==aimKey then
+    if not gameProcessed and input.KeyCode == aimKey then
         aimEnabled = not aimEnabled
         Tabs.Main:GetOption("AimToggle"):SetValue(aimEnabled)
     end
@@ -257,21 +232,20 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Fly Mode toggle
 local flying = false
 local flySpeed = 50
 local bodyVelocity, bodyGyro
 
 local function startFly()
-    local char = player.Character or player.CharacterAdded:Wait()
+    local char = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
     local hrp = char:WaitForChild("HumanoidRootPart")
     bodyVelocity = Instance.new("BodyVelocity")
-    bodyVelocity.MaxForce = Vector3.new(1e5,1e5,1e5)
-    bodyVelocity.Velocity = Vector3.new(0,0,0)
+    bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
     bodyVelocity.Parent = hrp
 
     bodyGyro = Instance.new("BodyGyro")
-    bodyGyro.MaxTorque = Vector3.new(1e5,1e5,1e5)
+    bodyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
     bodyGyro.CFrame = hrp.CFrame
     bodyGyro.Parent = hrp
 end
@@ -302,7 +276,7 @@ Tabs.Main:AddToggle("FlyToggle", {
 
 RunService.Heartbeat:Connect(function()
     if flying and bodyVelocity and bodyGyro then
-        local char = player.Character
+        local char = game.Players.LocalPlayer.Character
         if char then
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if hrp then
@@ -314,7 +288,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Teleport toggles
 local teleportUp = false
 local teleportDown = false
 local teleportHeight = 50
@@ -338,7 +311,7 @@ Tabs.Main:AddToggle("TeleportDownToggle", {
 })
 
 RunService.Heartbeat:Connect(function()
-    local char = player.Character
+    local char = game.Players.LocalPlayer.Character
     if char then
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if hrp then
@@ -351,7 +324,9 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- SaveManager and InterfaceManager config
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 
@@ -372,4 +347,4 @@ Fluent:Notify({
     Duration = 6
 })
 
--- Không gọi Window:Init() theo thư viện mới
+-- Không gọi Window:Init() do thư viện Fluent mới không cần
