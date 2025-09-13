@@ -52,7 +52,7 @@ local defaultWalkSpeed = 16
 -- Speed slider with description
 Tabs.Main:AddSlider("WalkSpeedSlider", {
     Title = "Speed",
-    Description = "Speed", -- mô tả
+    Description = "Speed",
     Min = 8,
     Max = 100,
     Default = defaultWalkSpeed,
@@ -69,7 +69,7 @@ local defaultJumpPower = 50
 -- Jump Power slider with description
 Tabs.Main:AddSlider("JumpPowerSlider", {
     Title = "Jump Power",
-    Description = "Jump Power", -- mô tả
+    Description = "Jump Power",
     Min = 20,
     Max = 200,
     Default = defaultJumpPower,
@@ -86,7 +86,7 @@ Tabs.Main:AddSlider("JumpPowerSlider", {
 local infiniteJumpEnabled = false
 Tabs.Main:AddToggle("InfiniteJumpToggle", {
     Title = "Infinite Jump",
-    Description = "Infinite Jump", -- mô tả
+    Description = "Infinite Jump",
     Default = false,
     Callback = function(val)
         infiniteJumpEnabled = val
@@ -151,7 +151,7 @@ end)
 
 game.Players.PlayerRemoving:Connect(removeESP)
 
--- Noclip toggle without description (giữ nguyên cũ)
+-- Noclip toggle without description
 local noclipEnabled = false
 Tabs.Main:AddToggle("NoclipToggle", {
     Title = "Noclip",
@@ -323,6 +323,27 @@ RunService.Heartbeat:Connect(function()
                 hrp.CFrame = CFrame.new(hrp.Position - Vector3.new(0, teleportHeight, 0))
             end
         end
+    end
+end)
+
+-- Auto Click toggle (không mô tả)
+local autoClickEnabled = false
+local autoClickDelay = 0.1
+
+Tabs.Main:AddToggle("AutoClickToggle", {
+    Title = "Auto Click",
+    Default = false,
+    Callback = function(val)
+        autoClickEnabled = val
+    end
+})
+
+RunService.RenderStepped:Connect(function()
+    if autoClickEnabled then
+        local vm = game:GetService("VirtualInputManager")
+        vm:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        task.wait(autoClickDelay)
+        vm:SendMouseButtonEvent(0, 0, 0, false, game, 0)
     end
 end)
 
