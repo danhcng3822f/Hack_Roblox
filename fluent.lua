@@ -105,28 +105,147 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
+-- ===== Safe notification helper (add once near top if not present) =====
+local function sendNotification(title, text, duration)
+    duration = duration or 4
+    local ok = pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = tostring(title),
+            Text = tostring(text),
+            Duration = duration
+        })
+    end)
+    if ok then return end
+
+    -- fallback small banner
+    if game.CoreGui:FindFirstChild("_HackNotify") then
+        pcall(function() game.CoreGui._HackNotify:Destroy() end)
+    end
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "_HackNotify"
+    sg.ResetOnSpawn = false
+    sg.Parent = game.CoreGui
+
+    local frame = Instance.new("Frame", sg)
+    frame.Size = UDim2.new(0, 420, 0, 72)
+    frame.Position = UDim2.new(0.5, -210, 0.04, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    frame.BackgroundTransparency = 0.12
+    frame.BorderSizePixel = 0
+
+    local titleLbl = Instance.new("TextLabel", frame)
+    titleLbl.Size = UDim2.new(1, -20, 0, 24)
+    titleLbl.Position = UDim2.new(0,10,0,6)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Font = Enum.Font.SourceSansBold
+    titleLbl.TextSize = 18
+    titleLbl.TextColor3 = Color3.fromRGB(255,255,255)
+    titleLbl.Text = tostring(title)
+    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+    local bodyLbl = Instance.new("TextLabel", frame)
+    bodyLbl.Size = UDim2.new(1, -20, 1, -34)
+    bodyLbl.Position = UDim2.new(0,10,0,30)
+    bodyLbl.BackgroundTransparency = 1
+    bodyLbl.Font = Enum.Font.SourceSans
+    bodyLbl.TextSize = 14
+    bodyLbl.TextColor3 = Color3.fromRGB(230,230,230)
+    bodyLbl.TextWrapped = true
+    bodyLbl.Text = tostring(text)
+    bodyLbl.TextXAlignment = Enum.TextXAlignment.Left
+    bodyLbl.TextYAlignment = Enum.TextYAlignment.Top
+
+    task.delay(duration, function()
+        pcall(function() sg:Destroy() end)
+    end)
+end
+
+-- ===== FIXED ESP (robust, auto-add for new players/respawns, clean disconnect) =====
 local espEnabled = false
-local espHighlights = {}
+local espHighlights = {}        -- player -> Highlight instance
+local espCharConns = {}        -- player -> CharacterAdded connection
+local espPlayerAddedConn = nil
 
-local function addESP(p)
-    if p ~= LocalPlayer and p.Character and not espHighlights[p] then
-        local highlight = Instance.new("Highlight")
-        highlight.Adornee = p.Character
-        highlight.FillColor = Color3.fromRGB(255, 0, 0)
-        highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-        highlight.Name = "ESP_Highlight"
-        highlight.Parent = p.Character
-        espHighlights[p] = highlight
+local function removeHighlightFor(player)
+    if espHighlights[player] then
+        pcall(function() espHighlights[player]:Destroy() end)
+        espHighlights[player] = nil
     end
 end
 
-local function removeESP(p)
-    if espHighlights[p] then
-        espHighlights[p]:Destroy()
-        espHighlights[p] = nil
+local function createHighlightForCharacter(player)
+    if not player or not player.Character then return end
+    -- remove old highlight if any
+    removeHighlightFor(player)
+    local ok, err = pcall(function()
+        local h = Instance.new("Highlight")
+        h.Name = "ESP_Highlight"
+        h.Adornee = player.Character
+        h.FillColor = Color3.fromRGB(255, 0, 0)
+        h.OutlineColor = Color3.fromRGB(255, 0, 0)
+        h.Parent = player.Character
+        espHighlights[player] = h
+    end)
+    if not ok then warn("createHighlightForCharacter error:", err) end
+end
+
+local function onCharacterAdded(player, char)
+    -- delay tiny bit so character parts fully exist
+    task.delay(0.12, function()
+        if espEnabled then
+            createHighlightForCharacter(player)
+        end
+    end)
+end
+
+local function enableESP()
+    -- for existing players
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            if player.Character then
+                createHighlightForCharacter(player)
+            end
+            -- connect CharacterAdded if not already
+            if not espCharConns[player] then
+                espCharConns[player] = player.CharacterAdded:Connect(function(c) onCharacterAdded(player, c) end)
+            end
+        end
+    end
+    -- listen for newly joined players
+    if not espPlayerAddedConn then
+        espPlayerAddedConn = Players.PlayerAdded:Connect(function(player)
+            -- connect to their CharacterAdded
+            espCharConns[player] = player.CharacterAdded:Connect(function(c) onCharacterAdded(player, c) end)
+            -- if they already have a character immediately (rare), add highlight
+            if player.Character then
+                task.delay(0.12, function() if espEnabled then createHighlightForCharacter(player) end end)
+            end
+        end)
     end
 end
 
+local function disableESP()
+    -- destroy highlights
+    for p, h in pairs(espHighlights) do
+        pcall(function() h:Destroy() end)
+    end
+    espHighlights = {}
+
+    -- disconnect CharacterAdded connections
+    for p, conn in pairs(espCharConns) do
+        pcall(function() conn:Disconnect() end)
+    end
+    espCharConns = {}
+
+    -- disconnect PlayerAdded
+    if espPlayerAddedConn then
+        pcall(function() espPlayerAddedConn:Disconnect() end)
+        espPlayerAddedConn = nil
+    end
+end
+
+-- Replace/Add this toggle (remove old AddToggle for "ESPToggle")
+-- If you already have a Toggle, remove the earlier one to avoid duplicate callbacks.
 Tabs.LocalPlayer:AddToggle("ESPToggle", {
     Title = "Esp",
     Description = "esp player",
@@ -134,24 +253,24 @@ Tabs.LocalPlayer:AddToggle("ESPToggle", {
     Callback = function(val)
         espEnabled = val
         if espEnabled then
-            for _, p in pairs(Players:GetPlayers()) do
-                addESP(p)
-            end
+            enableESP()
+            sendNotification("ESP", "ESP đã bật", 2)
         else
-            for _, p in pairs(Players:GetPlayers()) do
-                removeESP(p)
-            end
+            disableESP()
+            sendNotification("ESP", "ESP đã tắt", 2)
         end
     end
 })
 
-Players.PlayerAdded:Connect(function(p)
-    p.CharacterAdded:Connect(function()
-        if espEnabled then addESP(p) end
-    end)
+-- Clean up when a player leaves
+Players.PlayerRemoving:Connect(function(player)
+    -- remove highlight and disconnect character-connections for that player
+    removeHighlightFor(player)
+    if espCharConns[player] then
+        pcall(function() espCharConns[player]:Disconnect() end)
+        espCharConns[player] = nil
+    end
 end)
-
-Players.PlayerRemoving:Connect(removeESP)
 
 local noclipEnabled = false
 Tabs.LocalPlayer:AddToggle("NoclipToggle", {
@@ -340,6 +459,140 @@ RunService.RenderStepped:Connect(function()
         vm:SendMouseButtonEvent(0, 0, 0, true, game, 0)
         task.wait(autoClickDelay)
         vm:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+    end
+end)
+
+-- ========== Others Player Section (as you requested) ==========
+Tabs.LocalPlayer:AddSection("Others Player")
+
+-- state for teleporting
+local selectedPlayer = nil
+local teleportEnabled = false
+local teleportDelay = 1 -- default 1 second as you requested earlier; but slider will set 0.1-1
+-- We'll set default to 1s to match your earlier preference (you asked default 1s before)
+teleportDelay = 1
+
+-- helper to build player list
+local function getPlayerList()
+    local list = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            table.insert(list, p.Name)
+        end
+    end
+    return list
+end
+
+-- Dropdown to select player (no description added since you asked not to add descriptions you didn't provide)
+local teleportDropdown = Tabs.LocalPlayer:AddDropdown("TeleportPlayerDropdown", {
+    Title = "Teleport to",
+    Values = getPlayerList(),
+    Multi = false,
+    Default = "",
+    Callback = function(val)
+        selectedPlayer = val
+    end
+})
+
+-- ===== Refresh Player List Button (Full) =====
+-- Đảm bảo teleportDropdown đã được khai báo ở trên và Tabs.LocalPlayer tồn tại
+
+local function safeRefreshPlayerList()
+    local list = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then table.insert(list, p.Name) end
+    end
+
+    if teleportDropdown and type(teleportDropdown.SetValues) == "function" then
+        local ok, err = pcall(function() teleportDropdown:SetValues(list) end)
+        if ok then
+            sendNotification("Player List", "Đã làm mới danh sách player!", 2)
+        else
+            warn("SetValues failed:", err)
+            sendNotification("Refresh Failed", "Không thể cập nhật dropdown!", 3)
+        end
+    elseif teleportDropdown and teleportDropdown.Values ~= nil then
+        local ok, err = pcall(function() teleportDropdown.Values = list end)
+        if ok then
+            sendNotification("Player List", "Đã làm mới danh sách player!", 2)
+        else
+            warn("Assign Values failed:", err)
+            sendNotification("Refresh Failed", "Không thể cập nhật dropdown!", 3)
+        end
+    else
+        sendNotification("Refresh Failed", "Dropdown chưa được tạo hoặc không hỗ trợ!", 3)
+    end
+end
+
+-- Đây là nút sẽ hiện trong tab LocalPlayer
+Tabs.LocalPlayer:AddButton({
+    Title = "Refresh Player List",
+    Description = "Làm mới danh sách người chơi",
+    Callback = function()
+        safeRefreshPlayerList()
+    end
+})
+
+-- Teleport speed slider (0.1 - 1) — keep rounding 1 (Fluent uses Rounding as decimals count in some versions)
+Tabs.LocalPlayer:AddSlider("TeleportSpeed", {
+    Title = "Teleport Speed",
+    Description = "Thời gian mỗi lần teleport (giây)",
+    Min = 0.1,
+    Max = 1,
+    Default = 1,
+    Rounding = 1,
+    Callback = function(val)
+        teleportDelay = val
+    end
+})
+
+-- Teleport Toggle (continuous teleport while on)
+local teleportToggleControl = nil
+teleportToggleControl = Tabs.LocalPlayer:AddToggle("TeleportToggle", {
+    Title = "Teleport To",
+    Description = "Teleport liên tục đến player đã chọn",
+    Default = false,
+    Callback = function(val)
+        teleportEnabled = val
+        if teleportEnabled then
+            -- spawn loop
+            task.spawn(function()
+                while teleportEnabled do
+                    if selectedPlayer and selectedPlayer ~= "" then
+                        local target = Players:FindFirstChild(selectedPlayer)
+                        local okTarget = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+                        local okSelf = LocalPlayer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if okTarget and okSelf then
+                            pcall(function()
+                                LocalPlayer.Character.HumanoidRootPart.CFrame = target.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+                            end)
+                        else
+                            -- if target not found (left or not loaded), auto disable teleport
+                            teleportEnabled = false
+                            pcall(function() teleportToggleControl:SetValue(false) end)
+                            sendNotification("Teleport", "Target không tồn tại hoặc chưa load. Teleport đã tắt.", 3)
+                            break
+                        end
+                    else
+                        -- no selected player
+                        teleportEnabled = false
+                        pcall(function() teleportToggleControl:SetValue(false) end)
+                        sendNotification("Teleport", "Bạn chưa chọn player. Teleport đã tắt.", 3)
+                        break
+                    end
+                    task.wait(teleportDelay)
+                end
+            end)
+        end
+    end
+})
+
+-- Auto-disable teleport when selected player leaves
+Players.PlayerRemoving:Connect(function(p)
+    if p and p.Name == selectedPlayer then
+        teleportEnabled = false
+        pcall(function() teleportToggleControl:SetValue(false) end)
+        sendNotification("Teleport", "Player đã rời. Teleport tự tắt.", 3)
     end
 end)
 
