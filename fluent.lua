@@ -55,6 +55,39 @@ local Options = Fluent.Options
 
 -- LocalPlayer Tab --
 
+-- Reset Character (sửa lại, không còn lỗi khi bấm)
+Tabs.LocalPlayer:AddButton({
+    Title = "Reset Character",
+    Callback = function()
+        local char = LocalPlayer and LocalPlayer.Character
+        if char and char:FindFirstChild("Humanoid") then
+            local ok, err = pcall(function()
+                char:BreakJoints()
+            end)
+            if ok then
+                game.StarterGui:SetCore("SendNotification", {
+                    Title = "Reset",
+                    Text = "Nhân vật đã được reset!",
+                    Duration = 2
+                })
+            else
+                game.StarterGui:SetCore("SendNotification", {
+                    Title = "Reset Failed",
+                    Text = "Lỗi khi reset nhân vật!",
+                    Duration = 3
+                })
+                warn("Reset Character error:", err)
+            end
+        else
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "Reset Failed",
+                Text = "Không tìm thấy nhân vật!",
+                Duration = 3
+            })
+        end
+    end
+})
+
 local defaultWalkSpeed = 16
 Tabs.LocalPlayer:AddSlider("WalkSpeedSlider", {
     Title = "Speed",
@@ -602,6 +635,42 @@ Tabs.Server:AddButton({
     Title = "Rejoin Server",
     Callback = function()
         TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+-- Thêm Server Hop vào tab Server
+Tabs.Server:AddButton({
+    Title = "Hop Server",
+    Callback = function()
+        local HttpService = game:GetService("HttpService")
+        local TeleportService = game:GetService("TeleportService")
+
+        local success, result = pcall(function()
+            local servers = HttpService:JSONDecode(game:HttpGet(
+                "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+            ))
+            return servers
+        end)
+
+        if success and result and result.data then
+            for _, server in ipairs(result.data) do
+                if server.playing < server.maxPlayers and server.id ~= game.JobId then
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id)
+                    return
+                end
+            end
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "Server Hop",
+                Text = "Không tìm thấy server khác!",
+                Duration = 3
+            })
+        else
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "Server Hop",
+                Text = "Lỗi lấy danh sách server!",
+                Duration = 3
+            })
+        end
     end
 })
 
