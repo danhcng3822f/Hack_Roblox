@@ -36,7 +36,7 @@ end)
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 
 local Window = Fluent:CreateWindow({
-    Title = "Hacker Script",
+    Title = "Hacker Script - Premium",
     SubTitle = "By Danhcng",
     TabWidth = 200,
     Size = UDim2.fromOffset(480, 350),
@@ -88,7 +88,25 @@ Tabs.LocalPlayer:AddButton({
     end
 })
 
+-- WalkSpeed & JumpPower Save State Fix
 local defaultWalkSpeed = 16
+local defaultJumpPower = 50
+local currentWalkSpeed = defaultWalkSpeed
+local currentJumpPower = defaultJumpPower
+
+local function applyStats()
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChildOfClass("Humanoid") then
+        char:FindFirstChildOfClass("Humanoid").WalkSpeed = currentWalkSpeed
+        char:FindFirstChildOfClass("Humanoid").JumpPower = currentJumpPower
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    wait(1)
+    applyStats()
+end)
+
 Tabs.LocalPlayer:AddSlider("WalkSpeedSlider", {
     Title = "Speed",
     Min = 8,
@@ -96,38 +114,39 @@ Tabs.LocalPlayer:AddSlider("WalkSpeedSlider", {
     Default = defaultWalkSpeed,
     Rounding = 0,
     Callback = function(val)
-        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid.WalkSpeed = val
-        end
+        currentWalkSpeed = val
+        applyStats()
     end
 })
 
-local defaultJumpPower = 50
 Tabs.LocalPlayer:AddSlider("JumpPowerSlider", {
     Title = "Jump Power",
-    Description = "Jump Power",
+    Description = "Độ cao khi nhảy",
     Min = 20,
     Max = 200,
     Default = defaultJumpPower,
     Rounding = 0,
     Callback = function(val)
-        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid.JumpPower = val
-        end
+        currentJumpPower = val
+        applyStats()
     end
 })
 
+-- Infinite Jump Fix
 local infiniteJumpEnabled = false
 Tabs.LocalPlayer:AddToggle("InfiniteJumpToggle", {
     Title = "Infinite Jump",
-    Description = "Infinite Jump",
     Default = false,
     Callback = function(val)
         infiniteJumpEnabled = val
     end
 })
+
+UserInputService.JumpRequest:Connect(function()
+    if infiniteJumpEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character:FindFirstChild("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and infiniteJumpEnabled and input.KeyCode == Enum.KeyCode.Space then
@@ -375,69 +394,129 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+local plr = game.Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
 local flying = false
-local flySpeed = 50
+local speed = 50
+local maxSpeed = 150
+
+local torso, humanoid
 local bodyVelocity, bodyGyro
 
-local function startFly()
-    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local hrp = char:WaitForChild("HumanoidRootPart")
-    bodyVelocity = Instance.new("BodyVelocity")
-    bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-    bodyVelocity.Parent = hrp
+local ctrl = {f=0,b=0,l=0,r=0}
 
-    bodyGyro = Instance.new("BodyGyro")
-    bodyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-    bodyGyro.CFrame = hrp.CFrame
-    bodyGyro.Parent = hrp
-end
-
-local function stopFly()
-    if bodyVelocity then
-        bodyVelocity:Destroy()
-        bodyVelocity = nil
-    end
-    if bodyGyro then
-        bodyGyro:Destroy()
-        bodyGyro = nil
+local function disableHumanoidStates()
+    if humanoid then
+        local con
+        con = humanoid.StateChanged:Connect(function(old,new)
+            if flying then
+                humanoid:ChangeState(Enum.HumanoidStateType.PlatformStanding)
+            else
+                con:Disconnect()
+            end
+        end)
     end
 end
 
-Tabs.LocalPlayer:AddToggle("FlyToggle", {
-    Title = "Fly",
-    Description = "dành cho mobile",
-    Default = false,
-    Callback = function(val)
-        flying = val
-        if flying then
-            startFly()
-        else
-            stopFly()
-        end
-    end
-})
-
-RunService.Heartbeat:Connect(function()
-    if flying and bodyVelocity and bodyGyro then
-        local char = LocalPlayer.Character
-        if char then
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local moveVector = workspace.CurrentCamera.CFrame.LookVector * 0.5
-                bodyVelocity.Velocity = moveVector * flySpeed
-                bodyGyro.CFrame = workspace.CurrentCamera.CFrame
+local function teleSmall()
+    if torso and flying then
+        local char = plr.Character
+        if char and humanoid then
+            local moveDir = humanoid.MoveDirection
+            if moveDir.Magnitude > 0 then
+                local cam = workspace.CurrentCamera.CFrame
+                local moveVector = (cam.RightVector * moveDir.X + cam.LookVector * moveDir.Z).Unit * speed / 10
+                char:TranslateBy(moveVector)
             end
         end
     end
-end)
+end
+
+local function Fly()
+    local char = plr.Character or plr.CharacterAdded:Wait()
+    torso = char:WaitForChild("HumanoidRootPart")
+    humanoid = char:WaitForChild("Humanoid")
+
+    disableHumanoidStates()
+
+    bodyGyro = Instance.new("BodyGyro", torso)
+    bodyGyro.P = 9e4
+    bodyGyro.maxTorque = Vector3.new(9e9,9e9,9e9)
+    bodyGyro.cframe = torso.CFrame
+
+    bodyVelocity = Instance.new("BodyVelocity", torso)
+    bodyVelocity.velocity = Vector3.new(0,0.1,0)
+    bodyVelocity.maxForce = Vector3.new(9e9,9e9,9e9)
+
+    flying = true
+    humanoid.PlatformStand = true
+    char.Animate.Disabled = true
+
+    spawn(function()
+        while flying do
+            teleSmall()
+            wait(0.05)
+        end
+    end)
+
+    while flying do
+        RunService.Heartbeat:Wait()
+        local moveVector = humanoid.MoveDirection
+        if moveVector.Magnitude > 0 then
+            local cam = workspace.CurrentCamera.CFrame
+            local velocity = (cam.RightVector * moveVector.X + cam.LookVector * moveVector.Z).Unit * speed
+            bodyVelocity.Velocity = Vector3.new(velocity.X,0,velocity.Z)
+            bodyGyro.CFrame = CFrame.new(torso.Position, torso.Position + workspace.CurrentCamera.CFrame.LookVector)
+        else
+            bodyVelocity.Velocity = Vector3.new(0,0,0)
+        end
+    end
+    -- Cleanup
+    flying = false
+    if bodyVelocity then bodyVelocity:Destroy() end
+    if bodyGyro then bodyGyro:Destroy() end
+    if humanoid then humanoid.PlatformStand = false end
+    if char.Animate then char.Animate.Disabled = false end
+end
+
+local function startFly() 
+    if not flying then coroutine.wrap(Fly)() end 
+end
+
+local function stopFly() 
+    flying = false 
+end
+
+-- Thêm toggle fly trong Fluent UI LocalPlayer tab
+Tabs.LocalPlayer:AddToggle("FlyToggle", {
+    Title = "Fly (Demo)",
+    Default = false,
+    Callback = function(val)
+        if val then startFly() else stopFly() end
+    end
+})
+
+-- Thêm slider điều chỉnh tốc độ bay trong Fluent UI tab LocalPlayer
+Tabs.LocalPlayer:AddSlider("FlySpeedSlider", {
+    Title = "Fly",
+    Description = "Speed",
+    Min = 10,
+    Max = 150,
+    Default = speed,
+    Rounding = 0,
+    Callback = function(val)
+        speed = val
+    end
+})
 
 local teleportUp = false
 local teleportDown = false
 local teleportHeight = 50
 
 Tabs.LocalPlayer:AddToggle("TeleportUpToggle", {
-    Title = "Tele Up",
+    Title = "Teleport Up",
     Description = "teleport lên trời",
     Default = false,
     Callback = function(val)
@@ -449,7 +528,7 @@ Tabs.LocalPlayer:AddToggle("TeleportUpToggle", {
 })
 
 Tabs.LocalPlayer:AddToggle("TeleportDownToggle", {
-    Title = "Tele Down",
+    Title = "Teleport Down",
     Description = "teleport xuống dưới đất",
     Default = false,
     Callback = function(val)
@@ -560,7 +639,6 @@ end
 -- Đây là nút sẽ hiện trong tab LocalPlayer
 Tabs.LocalPlayer:AddButton({
     Title = "Refresh Player List",
-    Description = "Làm mới danh sách người chơi",
     Callback = function()
         safeRefreshPlayerList()
     end
@@ -568,8 +646,8 @@ Tabs.LocalPlayer:AddButton({
 
 -- Teleport speed slider (0.1 - 1) — keep rounding 1 (Fluent uses Rounding as decimals count in some versions)
 Tabs.LocalPlayer:AddSlider("TeleportSpeed", {
-    Title = "Teleport Speed",
-    Description = "Thời gian mỗi lần teleport (giây)",
+    Title = "Teleport",
+    Description = "Speed",
     Min = 0.1,
     Max = 1,
     Default = 1,
@@ -582,8 +660,7 @@ Tabs.LocalPlayer:AddSlider("TeleportSpeed", {
 -- Teleport Toggle (continuous teleport while on)
 local teleportToggleControl = nil
 teleportToggleControl = Tabs.LocalPlayer:AddToggle("TeleportToggle", {
-    Title = "Teleport To",
-    Description = "Teleport liên tục đến player đã chọn",
+    Title = "Teleport To Player",
     Default = false,
     Callback = function(val)
         teleportEnabled = val
@@ -727,8 +804,8 @@ end
 Window:SelectTab(1)
 
 Fluent:Notify({
-    Title = "Hacker Script",
-    Content = "By Danhcng đã tải!",
+    Title = "Owner",
+    Content = "Hacker Script Loaded!",
     Duration = 6
 })
 
