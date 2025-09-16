@@ -71,7 +71,7 @@ local function createAutoBugWindow()
 
     -- Title
     local TitleLabel = Instance.new("TextLabel")
-    TitleLabel.Text = "All Console Logs"
+    TitleLabel.Text = "Auto Check Status"
     TitleLabel.Size = UDim2.new(1, 0, 0, 40)
     TitleLabel.BackgroundTransparency = 1
     TitleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
