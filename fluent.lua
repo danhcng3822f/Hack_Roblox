@@ -605,20 +605,61 @@ local playerDropdown = Tabs.LocalPlayer:AddDropdown("PlayerDropdown", {
     end
 })
 
--- Nút refresh danh sách player
+local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
+
+-- Hàm lấy danh sách player
+local function getPlayerList()
+    local list = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= Players.LocalPlayer then
+            table.insert(list, p.Name)
+        end
+    end
+    return list
+end
+
+-- Hàm refresh danh sách
+local function safeRefreshPlayerList()
+    local list = getPlayerList()
+    if playerDropdown and type(playerDropdown.SetValues) == "function" then
+        local ok, err = pcall(function()
+            playerDropdown:SetValues(list)
+        end)
+        if ok then
+            StarterGui:SetCore("SendNotification", {
+                Title = "Player List",
+                Text = "Đã làm mới danh sách player!",
+                Duration = 2
+            })
+        else
+            StarterGui:SetCore("SendNotification", {
+                Title = "Refresh Failed",
+                Text = "Không thể cập nhật dropdown!",
+                Duration = 3
+            })
+        end
+    else
+        StarterGui:SetCore("SendNotification", {
+            Title = "Refresh Failed",
+            Text = "Dropdown chưa được tạo hoặc không hỗ trợ!",
+            Duration = 3
+        })
+    end
+end
+
+-- Nút bấm để refresh
 Tabs.LocalPlayer:AddButton({
     Title = "Refresh Player List",
     Callback = function()
-        if playerDropdown and type(playerDropdown.SetValues) == "function" then
-            playerDropdown:SetValues(getPlayerList())
-        end
+        safeRefreshPlayerList()
     end
 })
 
 -- Teleport speed slider
 Tabs.LocalPlayer:AddSlider("TeleportSpeed", {
     Title = "Teleport",
-    Description = "Speed"
+    Description = "Speed",
     Min = 0.1,
     Max = 1,
     Default = 1,
@@ -756,6 +797,156 @@ Tabs.Server:AddButton({
                 Text = "Lỗi lấy danh sách server!",
                 Duration = 3
             })
+        end
+    end
+})
+
+-- Tạo tab Bugs
+local BugsTab = Window:AddTab({ Title = "Bugs", Icon = "terminal" })
+
+-- Bộ nhớ lưu lỗi console gần đây, giới hạn 50 lỗi
+local maxBugLog = 50
+local bugLogs = {}
+
+-- Bắt lỗi console, ghi lại lỗi đỏ
+local function onConsoleMessage(message, messageType)
+    if messageType == Enum.MessageType.MessageError or messageType == Enum.MessageType.MessageWarning then
+        if #bugLogs >= maxBugLog then
+            table.remove(bugLogs, 1)
+        end
+        table.insert(bugLogs, message)
+    end
+end
+game:GetService("LogService").MessageOut:Connect(onConsoleMessage)
+
+-- Tạo Frame UI cho show bug
+local function createBugWindow()
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "BugWindow"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.Parent = game.CoreGui
+
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.fromOffset(480, 350)
+    Frame.Position = UDim2.new(0.5, -240, 0.5, -175)  -- đặt giữa màn hình
+    Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    Frame.BorderSizePixel = 0
+    Frame.Visible = true
+    Frame.Parent = ScreenGui
+
+    -- Enable draggable behavior
+    local UserInputService = game:GetService("UserInputService")
+    local dragging = false
+    local dragInput
+    local dragStart
+    local startPos
+
+    local function update(input)
+        local delta = input.Position - dragStart
+        Frame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+
+    Frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = Frame.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    Frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+
+    -- Tiêu đề
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Text = "Bugs Status"
+    TitleLabel.Size = UDim2.new(1, 0, 0, 40)
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+    TitleLabel.Font = Enum.Font.SourceSansBold
+    TitleLabel.TextSize = 24
+    TitleLabel.Parent = Frame
+
+    -- Nút đóng
+    local CloseButton = Instance.new("TextButton")
+    CloseButton.Text = "X"
+    CloseButton.Size = UDim2.new(0, 30, 0, 30)
+    CloseButton.Position = UDim2.new(1, -35, 0, 5)
+    CloseButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    CloseButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+    CloseButton.Font = Enum.Font.SourceSansBold
+    CloseButton.TextSize = 20
+    CloseButton.Parent = Frame
+
+    CloseButton.MouseButton1Click:Connect(function()
+        ScreenGui:Destroy()
+    end)
+
+    -- ScrollFrame chứa log lỗi
+    local ScrollFrame = Instance.new("ScrollingFrame")
+    ScrollFrame.Size = UDim2.new(1, -20, 1, -50)
+    ScrollFrame.Position = UDim2.new(0, 10, 0, 40)
+    ScrollFrame.BackgroundTransparency = 1
+    ScrollFrame.BorderSizePixel = 0
+    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    ScrollFrame.Parent = Frame
+    ScrollFrame.ScrollBarThickness = 6
+
+    if #bugLogs == 0 then
+        local NoBugLabel = Instance.new("TextLabel")
+        NoBugLabel.Text = "No Bugs"
+        NoBugLabel.Size = UDim2.new(1, 0, 0, 30)
+        NoBugLabel.BackgroundTransparency = 1
+        NoBugLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+        NoBugLabel.Font = Enum.Font.SourceSansBold
+        NoBugLabel.TextSize = 20
+        NoBugLabel.Parent = ScrollFrame
+    else
+        local yPos = 0
+        for i, log in ipairs(bugLogs) do
+            local label = Instance.new("TextLabel")
+            label.Text = log
+            label.TextWrapped = true
+            label.BackgroundTransparency = 1
+            label.TextColor3 = Color3.fromRGB(255, 0, 0)
+            label.Font = Enum.Font.SourceSans
+            label.TextSize = 18
+            label.Size = UDim2.new(1, 0, 0, 40)
+            label.Position = UDim2.new(0, 0, 0, yPos)
+            label.Parent = ScrollFrame
+            yPos = yPos + 40
+        end
+        ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, yPos)
+    end
+end
+
+-- Thêm nút Check Status trong tab Bugs
+    BugsTab:AddButton({
+    Title = "Check Status",
+    Callback = function()
+        -- Nếu đang có cửa sổ bug thì không mở thêm
+        if not game.CoreGui:FindFirstChild("BugWindow") then
+            createBugWindow()
         end
     end
 })
