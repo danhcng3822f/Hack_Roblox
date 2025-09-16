@@ -7,7 +7,6 @@ local function onConsoleMessage(message, messageType)
     if #allConsoleLogs >= maxLogCount then
         table.remove(allConsoleLogs, 1)
     end
-    -- Lưu cấu trúc: {Text=message, Type=messageType}
     table.insert(allConsoleLogs, {Text = message, Type = messageType})
 end
 game:GetService("LogService").MessageOut:Connect(onConsoleMessage)
@@ -33,8 +32,7 @@ local function createAutoBugWindow()
 
     -- Dragging support
     local UserInputService = game:GetService("UserInputService")
-    local dragging = false
-    local dragInput, dragStart, startPos
+    local dragging, dragInput, dragStart, startPos
 
     local function update(input)
         local delta = input.Position - dragStart
@@ -71,7 +69,7 @@ local function createAutoBugWindow()
         end
     end)
 
-    -- Title Label
+    -- Title
     local TitleLabel = Instance.new("TextLabel")
     TitleLabel.Text = "All Console Logs"
     TitleLabel.Size = UDim2.new(1, 0, 0, 40)
@@ -91,6 +89,7 @@ local function createAutoBugWindow()
     CloseButton.Font = Enum.Font.SourceSansBold
     CloseButton.TextSize = 20
     CloseButton.Parent = Frame
+
     CloseButton.MouseButton1Click:Connect(function()
         ScreenGui:Destroy()
     end)
@@ -105,7 +104,6 @@ local function createAutoBugWindow()
     ScrollFrame.ScrollBarThickness = 6
     ScrollFrame.Parent = Frame
 
-    -- Hàm tạo nhãn màu theo loại message
     local function createLogLabel(text, messageType, yPos)
         local label = Instance.new("TextLabel")
         label.Text = text
@@ -116,11 +114,11 @@ local function createAutoBugWindow()
         label.Size = UDim2.new(1, 0, 0, 40)
         label.Position = UDim2.new(0, 0, 0, yPos)
         if messageType == Enum.MessageType.MessageError then
-            label.TextColor3 = Color3.fromRGB(255, 80, 80) -- đỏ
+            label.TextColor3 = Color3.fromRGB(255, 80, 80)
         elseif messageType == Enum.MessageType.MessageWarning then
-            label.TextColor3 = Color3.fromRGB(255, 200, 80) -- vàng
+            label.TextColor3 = Color3.fromRGB(255, 200, 80)
         else
-            label.TextColor3 = Color3.fromRGB(200, 200, 200) -- trắng xám cho bình thường
+            label.TextColor3 = Color3.fromRGB(200, 200, 200)
         end
         label.Parent = ScrollFrame
         return label
@@ -144,3 +142,16 @@ local function createAutoBugWindow()
         ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, yPos)
     end
 end
+
+-- Tự động kiểm tra Fluent UI lỗi và tự mở UI báo bug
+task.spawn(function()
+    task.wait(5) -- Đợi 5s cho các UI Fluent load
+    local FluentGlobal = _G.FluentGlobalObject or nil
+    local Window = FluentGlobal and FluentGlobal:GetWindow() or nil
+    local Tabs = Window and Window.Tabs or nil
+    if not Window or not Tabs or not Tabs.LocalPlayer or not Tabs.Server or not Tabs.Settings then
+        if not game.CoreGui:FindFirstChild("AutoBugWindow") then
+            createAutoBugWindow()
+        end
+    end
+end)
