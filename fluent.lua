@@ -577,14 +577,13 @@ end)
 -- ========== Others Player Section (as you requested) ==========
 Tabs.LocalPlayer:AddSection("Others Player")
 
--- state for teleporting
+-- state
 local selectedPlayer = nil
 local teleportEnabled = false
-local teleportDelay = 1 -- default 1 second as you requested earlier; but slider will set 0.1-1
--- We'll set default to 1s to match your earlier preference (you asked default 1s before)
-teleportDelay = 1
+local spectateEnabled = false
+local teleportDelay = 1 -- mặc định 1s
 
--- helper to build player list
+-- helper: lấy danh sách player trừ mình
 local function getPlayerList()
     local list = {}
     for _, p in pairs(Players:GetPlayers()) do
@@ -595,9 +594,9 @@ local function getPlayerList()
     return list
 end
 
--- Dropdown to select player (no description added since you asked not to add descriptions you didn't provide)
-local teleportDropdown = Tabs.LocalPlayer:AddDropdown("TeleportPlayerDropdown", {
-    Title = "Teleport to",
+-- Dropdown dùng chung
+local playerDropdown = Tabs.LocalPlayer:AddDropdown("PlayerDropdown", {
+    Title = "Player List",
     Values = getPlayerList(),
     Multi = false,
     Default = "",
@@ -606,48 +605,20 @@ local teleportDropdown = Tabs.LocalPlayer:AddDropdown("TeleportPlayerDropdown", 
     end
 })
 
--- ===== Refresh Player List Button (Full) =====
--- Đảm bảo teleportDropdown đã được khai báo ở trên và Tabs.LocalPlayer tồn tại
-
-local function safeRefreshPlayerList()
-    local list = {}
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then table.insert(list, p.Name) end
-    end
-
-    if teleportDropdown and type(teleportDropdown.SetValues) == "function" then
-        local ok, err = pcall(function() teleportDropdown:SetValues(list) end)
-        if ok then
-            sendNotification("Player List", "Đã làm mới danh sách player!", 2)
-        else
-            warn("SetValues failed:", err)
-            sendNotification("Refresh Failed", "Không thể cập nhật dropdown!", 3)
-        end
-    elseif teleportDropdown and teleportDropdown.Values ~= nil then
-        local ok, err = pcall(function() teleportDropdown.Values = list end)
-        if ok then
-            sendNotification("Player List", "Đã làm mới danh sách player!", 2)
-        else
-            warn("Assign Values failed:", err)
-            sendNotification("Refresh Failed", "Không thể cập nhật dropdown!", 3)
-        end
-    else
-        sendNotification("Refresh Failed", "Dropdown chưa được tạo hoặc không hỗ trợ!", 3)
-    end
-end
-
--- Đây là nút sẽ hiện trong tab LocalPlayer
+-- Nút refresh danh sách player
 Tabs.LocalPlayer:AddButton({
     Title = "Refresh Player List",
     Callback = function()
-        safeRefreshPlayerList()
+        if playerDropdown and type(playerDropdown.SetValues) == "function" then
+            playerDropdown:SetValues(getPlayerList())
+        end
     end
 })
 
--- Teleport speed slider (0.1 - 1) — keep rounding 1 (Fluent uses Rounding as decimals count in some versions)
+-- Teleport speed slider
 Tabs.LocalPlayer:AddSlider("TeleportSpeed", {
     Title = "Teleport",
-    Description = "Speed",
+    Description = "Speed"
     Min = 0.1,
     Max = 1,
     Default = 1,
@@ -657,37 +628,30 @@ Tabs.LocalPlayer:AddSlider("TeleportSpeed", {
     end
 })
 
--- Teleport Toggle (continuous teleport while on)
-local teleportToggleControl = nil
+-- Teleport toggle
+local teleportToggleControl
 teleportToggleControl = Tabs.LocalPlayer:AddToggle("TeleportToggle", {
     Title = "Teleport To Player",
     Default = false,
     Callback = function(val)
         teleportEnabled = val
         if teleportEnabled then
-            -- spawn loop
             task.spawn(function()
                 while teleportEnabled do
                     if selectedPlayer and selectedPlayer ~= "" then
                         local target = Players:FindFirstChild(selectedPlayer)
-                        local okTarget = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
-                        local okSelf = LocalPlayer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        if okTarget and okSelf then
-                            pcall(function()
-                                LocalPlayer.Character.HumanoidRootPart.CFrame = target.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
-                            end)
+                        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") and
+                           LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            LocalPlayer.Character.HumanoidRootPart.CFrame =
+                                target.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
                         else
-                            -- if target not found (left or not loaded), auto disable teleport
                             teleportEnabled = false
-                            pcall(function() teleportToggleControl:SetValue(false) end)
-                            sendNotification("Teleport", "Target không tồn tại hoặc chưa load. Teleport đã tắt.", 3)
+                            teleportToggleControl:SetValue(false)
                             break
                         end
                     else
-                        -- no selected player
                         teleportEnabled = false
-                        pcall(function() teleportToggleControl:SetValue(false) end)
-                        sendNotification("Teleport", "Bạn chưa chọn player. Teleport đã tắt.", 3)
+                        teleportToggleControl:SetValue(false)
                         break
                     end
                     task.wait(teleportDelay)
@@ -697,12 +661,57 @@ teleportToggleControl = Tabs.LocalPlayer:AddToggle("TeleportToggle", {
     end
 })
 
--- Auto-disable teleport when selected player leaves
+-- Spectate toggle
+local spectateToggleControl
+spectateToggleControl = Tabs.LocalPlayer:AddToggle("SpectateToggle", {
+    Title = "Spectate Player",
+    Default = false,
+    Callback = function(val)
+        spectateEnabled = val
+        if spectateEnabled then
+            task.spawn(function()
+                while spectateEnabled do
+                    if selectedPlayer and selectedPlayer ~= "" then
+                        local target = Players:FindFirstChild(selectedPlayer)
+                        if target and target.Character and target.Character:FindFirstChild("Head") then
+                            workspace.CurrentCamera.CameraSubject = target.Character:FindFirstChild("Head")
+                        else
+                            spectateEnabled = false
+                            spectateToggleControl:SetValue(false)
+                            break
+                        end
+                    else
+                        spectateEnabled = false
+                        spectateToggleControl:SetValue(false)
+                        break
+                    end
+                    task.wait(0.1)
+                end
+                -- khi tắt spectate thì camera quay về mình
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
+                    workspace.CurrentCamera.CameraSubject = LocalPlayer.Character:FindFirstChild("Head")
+                end
+            end)
+        else
+            -- tắt spectate thì camera quay về mình
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
+                workspace.CurrentCamera.CameraSubject = LocalPlayer.Character:FindFirstChild("Head")
+            end
+        end
+    end
+})
+
+-- auto disable teleport/spectate khi player rời game
 Players.PlayerRemoving:Connect(function(p)
     if p and p.Name == selectedPlayer then
-        teleportEnabled = false
-        pcall(function() teleportToggleControl:SetValue(false) end)
-        sendNotification("Teleport", "Player đã rời. Teleport tự tắt.", 3)
+        if teleportEnabled then
+            teleportEnabled = false
+            teleportToggleControl:SetValue(false)
+        end
+        if spectateEnabled then
+            spectateEnabled = false
+            spectateToggleControl:SetValue(false)
+        end
     end
 end)
 
