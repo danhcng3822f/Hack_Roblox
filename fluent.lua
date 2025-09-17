@@ -1,11 +1,312 @@
+-- Roblox Error Fallback System
+local ErrorHandler = {}
+
+-- Services
+local RunService = game:GetService("RunService")
+local LogService = game:GetService("LogService")
+local Players = game:GetService("Players")
+
+-- 1. Basic Fallback cho Roblox
+function ErrorHandler.executeWithFallback(primaryFunc, fallbackFunc, ...)
+    local success, result = pcall(primaryFunc, ...)
+    
+    if success then
+        return result
+    else
+        warn("⚠️ Primary function failed: " .. tostring(result))
+        warn("🔄 Using fallback function...")
+        
+        local fallbackSuccess, fallbackResult = pcall(fallbackFunc, ...)
+        
+        if fallbackSuccess then
+            print("✅ Fallback succeeded!")
+            return fallbackResult
+        else
+            error("❌ Both primary and fallback functions failed!\nPrimary: " .. tostring(result) .. "\nFallback: " .. tostring(fallbackResult))
+        end
+    end
+end
+
+-- 2. Fallback với retry cho network requests
+function ErrorHandler.httpRequestWithFallback(url, fallbackUrls, maxRetries)
+    local HttpService = game:GetService("HttpService")
+    maxRetries = maxRetries or 3
+    fallbackUrls = fallbackUrls or {}
+    
+    local urls = {url}
+    for _, fallbackUrl in ipairs(fallbackUrls) do
+        table.insert(urls, fallbackUrl)
+    end
+    
+    for urlIndex, currentUrl in ipairs(urls) do
+        for attempt = 1, maxRetries do
+            local success, result = pcall(function()
+                return HttpService:GetAsync(currentUrl)
+            end)
+            
+            if success then
+                if urlIndex > 1 or attempt > 1 then
+                    warn("✅ Request succeeded using " .. (urlIndex == 1 and "primary URL" or "fallback URL #" .. (urlIndex - 1)) .. " on attempt #" .. attempt)
+                end
+                return result
+            else
+                warn("⚠️ URL #" .. urlIndex .. " attempt #" .. attempt .. " failed: " .. tostring(result))
+                wait(attempt * 0.5)
+            end
+        end
+    end
+    
+    error("❌ All HTTP requests failed!")
+end
+
+-- 3. Safe Remote Event Handler
+function ErrorHandler.safeRemoteEventHandler(remoteEvent, handler, fallbackHandler)
+    remoteEvent.OnServerEvent:Connect(function(player, ...)
+        local success, result = pcall(handler, player, ...)
+        
+        if not success then
+            warn("⚠️ Remote event handler failed for player " .. player.Name .. ": " .. tostring(result))
+            
+            if fallbackHandler then
+                local fallbackSuccess, fallbackResult = pcall(fallbackHandler, player, ...)
+                if not fallbackSuccess then
+                    warn("❌ Fallback handler also failed: " .. tostring(fallbackResult))
+                end
+            end
+        end
+    end)
+end
+
+-- 4. Safe DataStore operations
+function ErrorHandler.safeDataStoreOperation(operation, fallbackData, maxRetries)
+    maxRetries = maxRetries or 5
+    
+    for attempt = 1, maxRetries do
+        local success, result = pcall(operation)
+        
+        if success then
+            if attempt > 1 then
+                warn("✅ DataStore operation succeeded on attempt #" .. attempt)
+            end
+            return result
+        else
+            warn("⚠️ DataStore attempt #" .. attempt .. " failed: " .. tostring(result))
+            
+            if attempt < maxRetries then
+                local waitTime = math.min(2^attempt, 10)
+                wait(waitTime)
+            end
+        end
+    end
+    
+    warn("❌ All DataStore attempts failed, using fallback data")
+    return fallbackData
+end
+
+-- 5. Global Error Handler cho toàn bộ script
+function ErrorHandler.setupGlobalErrorHandler()
+    local function handleError(message, trace)
+        warn("🚨 GLOBAL ERROR CAUGHT:")
+        warn("Message: " .. tostring(message))
+        warn("Stack trace: " .. tostring(trace))
+        
+        local errorInfo = {
+            message = tostring(message),
+            trace = tostring(trace),
+            timestamp = os.time(),
+            place = game.PlaceId
+        }
+        
+        print("Error logged:", game:GetService("HttpService"):JSONEncode(errorInfo))
+    end
+    
+    if RunService:IsServer() then
+        game:GetService("ScriptContext").Error:Connect(handleError)
+    end
+end
+
+-- 6. Safe tween với fallback
+function ErrorHandler.safeTween(object, info, properties, onComplete, onError)
+    local TweenService = game:GetService("TweenService")
+    
+    local success, tween = pcall(function()
+        return TweenService:Create(object, info, properties)
+    end)
+    
+    if success then
+        if onComplete then
+            tween.Completed:Connect(onComplete)
+        end
+        
+        local playSuccess = pcall(function()
+            tween:Play()
+        end)
+        
+        if not playSuccess and onError then
+            warn("⚠️ Tween play failed, executing error callback")
+            onError()
+        end
+        
+        return tween
+    else
+        warn("❌ Failed to create tween: " .. tostring(tween))
+        if onError then
+            onError()
+        end
+        return nil
+    end
+end
+
+-- 7. Heartbeat với error handling
+function ErrorHandler.safeHeartbeat(func, errorCallback)
+    local connection
+    connection = RunService.Heartbeat:Connect(function(...)
+        local success, result = pcall(func, ...)
+        
+        if not success then
+            warn("⚠️ Heartbeat function error: " .. tostring(result))
+            if errorCallback then
+                errorCallback(result)
+            end
+        end
+    end)
+    
+    return connection
+end
+
+-- 8. Safe Library Loading
+function ErrorHandler.loadLibrarySafely(urls, libName)
+    return ErrorHandler.executeWithFallback(
+        function()
+            return loadstring(game:HttpGet(urls[1]))()
+        end,
+        function()
+            for i = 2, #urls do
+                local success, result = pcall(function()
+                    return loadstring(game:HttpGet(urls[i]))()
+                end)
+                if success then
+                    warn("Loaded " .. libName .. " from backup URL #" .. (i-1))
+                    return result
+                end
+            end
+            error("All URLs failed for " .. libName)
+        end
+    )
+end
+
+-- 9. Safe Character Operations
+function ErrorHandler.safeCharacterOperation(operation, fallbackOperation)
+    return ErrorHandler.executeWithFallback(
+        function()
+            local char = Players.LocalPlayer.Character
+            if not char then error("No character") end
+            return operation(char)
+        end,
+        fallbackOperation or function()
+            warn("Character operation failed, waiting for respawn...")
+            Players.LocalPlayer.CharacterAdded:Wait()
+            local char = Players.LocalPlayer.Character
+            return operation(char)
+        end
+    )
+end
+
+-- ===== MAIN SCRIPT =====
+
 repeat task.wait(0.25) until game:IsLoaded();
 
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 
 local LocalPlayer = Players.LocalPlayer
+
+-- Setup global error handler
+ErrorHandler.setupGlobalErrorHandler()
+
+-- Bộ nhớ lưu lỗi console
+local maxBugLog = 50
+local bugLogs = {}
+
+-- Override warn để log vào bugLogs
+local originalWarn = warn
+warn = function(...)
+    originalWarn(...)
+    local message = table.concat({...}, " ")
+    if #bugLogs >= maxBugLog then
+        table.remove(bugLogs, 1)
+    end
+    table.insert(bugLogs, "[WARN] " .. message)
+end
+
+-- Bắt lỗi console
+local function onConsoleMessage(message, messageType)
+    if messageType == Enum.MessageType.MessageError or messageType == Enum.MessageType.MessageWarning then
+        if #bugLogs >= maxBugLog then
+            table.remove(bugLogs, 1)
+        end
+        table.insert(bugLogs, message)
+    end
+end
+game:GetService("LogService").MessageOut:Connect(onConsoleMessage)
+
+-- Safe notification helper
+local function sendNotification(title, text, duration)
+    duration = duration or 4
+    return ErrorHandler.executeWithFallback(
+        function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = tostring(title),
+                Text = tostring(text),
+                Duration = duration
+            })
+        end,
+        function()
+            -- Fallback UI notification
+            if game.CoreGui:FindFirstChild("_HackNotify") then
+                pcall(function() game.CoreGui._HackNotify:Destroy() end)
+            end
+            local sg = Instance.new("ScreenGui")
+            sg.Name = "_HackNotify"
+            sg.ResetOnSpawn = false
+            sg.Parent = game.CoreGui
+
+            local frame = Instance.new("Frame", sg)
+            frame.Size = UDim2.new(0, 420, 0, 72)
+            frame.Position = UDim2.new(0.5, -210, 0.04, 0)
+            frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+            frame.BackgroundTransparency = 0.12
+            frame.BorderSizePixel = 0
+
+            local titleLbl = Instance.new("TextLabel", frame)
+            titleLbl.Size = UDim2.new(1, -20, 0, 24)
+            titleLbl.Position = UDim2.new(0,10,0,6)
+            titleLbl.BackgroundTransparency = 1
+            titleLbl.Font = Enum.Font.SourceSansBold
+            titleLbl.TextSize = 18
+            titleLbl.TextColor3 = Color3.fromRGB(255,255,255)
+            titleLbl.Text = tostring(title)
+            titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+            local bodyLbl = Instance.new("TextLabel", frame)
+            bodyLbl.Size = UDim2.new(1, -20, 1, -34)
+            bodyLbl.Position = UDim2.new(0,10,0,30)
+            bodyLbl.BackgroundTransparency = 1
+            bodyLbl.Font = Enum.Font.SourceSans
+            bodyLbl.TextSize = 14
+            bodyLbl.TextColor3 = Color3.fromRGB(230,230,230)
+            bodyLbl.TextWrapped = true
+            bodyLbl.Text = tostring(text)
+            bodyLbl.TextXAlignment = Enum.TextXAlignment.Left
+            bodyLbl.TextYAlignment = Enum.TextYAlignment.Top
+
+            task.delay(duration, function()
+                pcall(function() sg:Destroy() end)
+            end)
+        end
+    )
+end
 
 -- Nút ImageButton toggle menu logo mới, kích thước 60x60
 local ScreenGui = Instance.new("ScreenGui")
@@ -33,7 +334,13 @@ ImageButton.MouseButton1Down:Connect(function()
     VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.End, false, game)
 end)
 
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+-- Load Fluent UI với fallback URLs
+local fluentUrls = {
+    "https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua",
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/src/init.lua"
+}
+
+local Fluent = ErrorHandler.loadLibrarySafely(fluentUrls, "Fluent")
 
 local Window = Fluent:CreateWindow({
     Title = "Hacker Script - Premium",
@@ -48,58 +355,85 @@ local Window = Fluent:CreateWindow({
 local Tabs = {
     LocalPlayer = Window:AddTab({ Title = "LocalPlayer", Icon = "box" }),
     Server = Window:AddTab({ Title = "Server", Icon = "server" }),
-    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
+    Bugs = Window:AddTab({ Title = "Bugs", Icon = "terminal" })
 }
 
-local Options = Fluent.Options
-
--- LocalPlayer Tab --
-
--- Reset Character (sửa lại, không còn lỗi khi bấm)
+-- Reset Character với ErrorHandler
 Tabs.LocalPlayer:AddButton({
     Title = "Reset Character",
     Callback = function()
-        local char = LocalPlayer and LocalPlayer.Character
-        if char and char:FindFirstChild("Humanoid") then
-            local ok, err = pcall(function()
+        ErrorHandler.safeCharacterOperation(
+            function(char)
                 char:BreakJoints()
-            end)
-            if ok then
-                game.StarterGui:SetCore("SendNotification", {
-                    Title = "Reset",
-                    Text = "Nhân vật đã được reset!",
-                    Duration = 2
-                })
-            else
-                game.StarterGui:SetCore("SendNotification", {
-                    Title = "Reset Failed",
-                    Text = "Lỗi khi reset nhân vật!",
-                    Duration = 3
-                })
-                warn("Reset Character error:", err)
+                sendNotification("Reset", "Nhân vật đã được reset!", 2)
+            end,
+            function()
+                sendNotification("Reset Failed", "Không thể reset nhân vật!", 3)
             end
-        else
-            game.StarterGui:SetCore("SendNotification", {
-                Title = "Reset Failed",
-                Text = "Không tìm thấy nhân vật!",
-                Duration = 3
-            })
+        )
+    end
+})
+
+-- God Mode với ErrorHandler
+local godModeEnabled = false
+local godModeConnection = nil
+
+local function applyGodMode(humanoid)
+    return ErrorHandler.executeWithFallback(
+        function()
+            humanoid.Health = humanoid.MaxHealth
+            return humanoid.HealthChanged:Connect(function(health)
+                if health < humanoid.MaxHealth then
+                    humanoid.Health = humanoid.MaxHealth
+                end
+            end)
+        end,
+        function()
+            warn("HealthChanged failed, using Heartbeat fallback")
+            return RunService.Heartbeat:Connect(function()
+                if humanoid and humanoid.Parent then
+                    humanoid.Health = humanoid.MaxHealth
+                end
+            end)
+        end
+    )
+end
+
+Tabs.LocalPlayer:AddToggle("GodModeToggle", {
+    Title = "God Mode",
+    Default = false,
+    Callback = function(val)
+        godModeEnabled = val
+        if godModeConnection then
+            godModeConnection:Disconnect()
+            godModeConnection = nil
+        end
+        if godModeEnabled then
+            ErrorHandler.safeCharacterOperation(function(char)
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    godModeConnection = applyGodMode(humanoid)
+                end
+            end)
         end
     end
 })
 
--- WalkSpeed & JumpPower Save State Fix
+-- WalkSpeed & JumpPower với ErrorHandler
 local defaultWalkSpeed = 16
 local defaultJumpPower = 50
 local currentWalkSpeed = defaultWalkSpeed
 local currentJumpPower = defaultJumpPower
 
 local function applyStats()
-    local char = LocalPlayer.Character
-    if char and char:FindFirstChildOfClass("Humanoid") then
-        char:FindFirstChildOfClass("Humanoid").WalkSpeed = currentWalkSpeed
-        char:FindFirstChildOfClass("Humanoid").JumpPower = currentJumpPower
-    end
+    ErrorHandler.safeCharacterOperation(function(char)
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = currentWalkSpeed
+            humanoid.JumpPower = currentJumpPower
+        end
+    end)
 end
 
 LocalPlayer.CharacterAdded:Connect(function()
@@ -121,7 +455,7 @@ Tabs.LocalPlayer:AddSlider("WalkSpeedSlider", {
 
 Tabs.LocalPlayer:AddSlider("JumpPowerSlider", {
     Title = "Jump Power",
-    Description = "Độ cao khi nhảy",
+    Description = "Nhảy Cao",
     Min = 20,
     Max = 200,
     Default = defaultJumpPower,
@@ -132,7 +466,7 @@ Tabs.LocalPlayer:AddSlider("JumpPowerSlider", {
     end
 })
 
--- Infinite Jump Fix
+-- Infinite Jump
 local infiniteJumpEnabled = false
 Tabs.LocalPlayer:AddToggle("InfiniteJumpToggle", {
     Title = "Infinite Jump",
@@ -143,79 +477,20 @@ Tabs.LocalPlayer:AddToggle("InfiniteJumpToggle", {
 })
 
 UserInputService.JumpRequest:Connect(function()
-    if infiniteJumpEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character:FindFirstChild("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
+    if infiniteJumpEnabled then
+        ErrorHandler.safeCharacterOperation(function(char)
+            local humanoid = char:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end)
     end
 end)
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and infiniteJumpEnabled and input.KeyCode == Enum.KeyCode.Space then
-        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping and humanoid:GetState() ~= Enum.HumanoidStateType.Freefall then
-            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
-    end
-end)
-
--- ===== Safe notification helper (add once near top if not present) =====
-local function sendNotification(title, text, duration)
-    duration = duration or 4
-    local ok = pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = tostring(title),
-            Text = tostring(text),
-            Duration = duration
-        })
-    end)
-    if ok then return end
-
-    -- fallback small banner
-    if game.CoreGui:FindFirstChild("_HackNotify") then
-        pcall(function() game.CoreGui._HackNotify:Destroy() end)
-    end
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "_HackNotify"
-    sg.ResetOnSpawn = false
-    sg.Parent = game.CoreGui
-
-    local frame = Instance.new("Frame", sg)
-    frame.Size = UDim2.new(0, 420, 0, 72)
-    frame.Position = UDim2.new(0.5, -210, 0.04, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-    frame.BackgroundTransparency = 0.12
-    frame.BorderSizePixel = 0
-
-    local titleLbl = Instance.new("TextLabel", frame)
-    titleLbl.Size = UDim2.new(1, -20, 0, 24)
-    titleLbl.Position = UDim2.new(0,10,0,6)
-    titleLbl.BackgroundTransparency = 1
-    titleLbl.Font = Enum.Font.SourceSansBold
-    titleLbl.TextSize = 18
-    titleLbl.TextColor3 = Color3.fromRGB(255,255,255)
-    titleLbl.Text = tostring(title)
-    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
-
-    local bodyLbl = Instance.new("TextLabel", frame)
-    bodyLbl.Size = UDim2.new(1, -20, 1, -34)
-    bodyLbl.Position = UDim2.new(0,10,0,30)
-    bodyLbl.BackgroundTransparency = 1
-    bodyLbl.Font = Enum.Font.SourceSans
-    bodyLbl.TextSize = 14
-    bodyLbl.TextColor3 = Color3.fromRGB(230,230,230)
-    bodyLbl.TextWrapped = true
-    bodyLbl.Text = tostring(text)
-    bodyLbl.TextXAlignment = Enum.TextXAlignment.Left
-    bodyLbl.TextYAlignment = Enum.TextYAlignment.Top
-
-    task.delay(duration, function()
-        pcall(function() sg:Destroy() end)
-    end)
-end
-
--- ===== FIXED ESP (robust, auto-add for new players/respawns, clean disconnect) =====
+-- ESP với ErrorHandler và fallback
 local espEnabled = false
-local espHighlights = {}        -- player -> Highlight instance
-local espCharConns = {}        -- player -> CharacterAdded connection
+local espHighlights = {}
+local espCharConns = {}
 local espPlayerAddedConn = nil
 
 local function removeHighlightFor(player)
@@ -227,22 +502,49 @@ end
 
 local function createHighlightForCharacter(player)
     if not player or not player.Character then return end
-    -- remove old highlight if any
-    removeHighlightFor(player)
-    local ok, err = pcall(function()
-        local h = Instance.new("Highlight")
-        h.Name = "ESP_Highlight"
-        h.Adornee = player.Character
-        h.FillColor = Color3.fromRGB(255, 0, 0)
-        h.OutlineColor = Color3.fromRGB(255, 0, 0)
-        h.Parent = player.Character
-        espHighlights[player] = h
-    end)
-    if not ok then warn("createHighlightForCharacter error:", err) end
+    
+    return ErrorHandler.executeWithFallback(
+        function()
+            removeHighlightFor(player)
+            local h = Instance.new("Highlight")
+            h.Name = "ESP_Highlight"
+            h.Adornee = player.Character
+            h.FillColor = Color3.fromRGB(255, 0, 0)
+            h.OutlineColor = Color3.fromRGB(255, 0, 0)
+            h.Parent = player.Character
+            espHighlights[player] = h
+            return h
+        end,
+        function()
+            warn("Highlight failed, using BillboardGui fallback")
+            local head = player.Character:FindFirstChild("Head")
+            if not head then return nil end
+            
+            local billboard = Instance.new("BillboardGui")
+            billboard.Name = "ESP_Billboard"
+            billboard.Parent = head
+            billboard.Size = UDim2.new(0, 100, 0, 50)
+            
+            local frame = Instance.new("Frame", billboard)
+            frame.Size = UDim2.new(1, 0, 1, 0)
+            frame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+            frame.BackgroundTransparency = 0.5
+            frame.BorderSizePixel = 2
+            
+            local label = Instance.new("TextLabel", frame)
+            label.Text = player.Name
+            label.Size = UDim2.new(1, 0, 1, 0)
+            label.BackgroundTransparency = 1
+            label.TextColor3 = Color3.fromRGB(255, 255, 255)
+            label.TextScaled = true
+            
+            espHighlights[player] = billboard
+            return billboard
+        end
+    )
 end
 
 local function onCharacterAdded(player, char)
-    -- delay tiny bit so character parts fully exist
     task.delay(0.12, function()
         if espEnabled then
             createHighlightForCharacter(player)
@@ -251,24 +553,19 @@ local function onCharacterAdded(player, char)
 end
 
 local function enableESP()
-    -- for existing players
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
             if player.Character then
                 createHighlightForCharacter(player)
             end
-            -- connect CharacterAdded if not already
             if not espCharConns[player] then
                 espCharConns[player] = player.CharacterAdded:Connect(function(c) onCharacterAdded(player, c) end)
             end
         end
     end
-    -- listen for newly joined players
     if not espPlayerAddedConn then
         espPlayerAddedConn = Players.PlayerAdded:Connect(function(player)
-            -- connect to their CharacterAdded
             espCharConns[player] = player.CharacterAdded:Connect(function(c) onCharacterAdded(player, c) end)
-            -- if they already have a character immediately (rare), add highlight
             if player.Character then
                 task.delay(0.12, function() if espEnabled then createHighlightForCharacter(player) end end)
             end
@@ -277,30 +574,25 @@ local function enableESP()
 end
 
 local function disableESP()
-    -- destroy highlights
     for p, h in pairs(espHighlights) do
         pcall(function() h:Destroy() end)
     end
     espHighlights = {}
-
-    -- disconnect CharacterAdded connections
+    
     for p, conn in pairs(espCharConns) do
         pcall(function() conn:Disconnect() end)
     end
     espCharConns = {}
-
-    -- disconnect PlayerAdded
+    
     if espPlayerAddedConn then
         pcall(function() espPlayerAddedConn:Disconnect() end)
         espPlayerAddedConn = nil
     end
 end
 
--- Replace/Add this toggle (remove old AddToggle for "ESPToggle")
--- If you already have a Toggle, remove the earlier one to avoid duplicate callbacks.
 Tabs.LocalPlayer:AddToggle("ESPToggle", {
     Title = "Esp",
-    Description = "esp player",
+    Description = "Esp Player",
     Default = false,
     Callback = function(val)
         espEnabled = val
@@ -314,9 +606,7 @@ Tabs.LocalPlayer:AddToggle("ESPToggle", {
     end
 })
 
--- Clean up when a player leaves
 Players.PlayerRemoving:Connect(function(player)
-    -- remove highlight and disconnect character-connections for that player
     removeHighlightFor(player)
     if espCharConns[player] then
         pcall(function() espCharConns[player]:Disconnect() end)
@@ -324,68 +614,66 @@ Players.PlayerRemoving:Connect(function(player)
     end
 end)
 
+-- Noclip
 local noclipEnabled = false
 Tabs.LocalPlayer:AddToggle("NoclipToggle", {
     Title = "Noclip",
-    Description = "đi xuyên vật thể",
     Default = false,
     Callback = function(val)
         noclipEnabled = val
     end
 })
 
-RunService.Stepped:Connect(function()
-    local char = LocalPlayer.Character
-    if char then
-        for _, part in pairs(char:GetChildren()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = not noclipEnabled
+ErrorHandler.safeHeartbeat(function()
+    if noclipEnabled then
+        ErrorHandler.safeCharacterOperation(function(char)
+            for _, part in pairs(char:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
             end
-        end
+        end)
     end
 end)
 
+-- Aim với ErrorHandler
 local aimEnabled = false
-local aimKey = Enum.KeyCode.T
 Tabs.LocalPlayer:AddToggle("AimToggle", {
     Title = "Aim",
-    Description = "aim tâm vào player, chỉ phù hợp với game bắn súng",
+    Description = "Aim tâm, không phải skill",
     Default = false,
     Callback = function(val)
         aimEnabled = val
     end
 })
 
-local function isEnemy(p1, p2)
-    if p1.Team and p2.Team then
-        return p1.Team ~= p2.Team
-    end
-    return true
-end
-
 local function getNearestEnemy()
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Head") then return nil end
-    local nearest, nearestDist = nil, math.huge
-    local ownHeadPos = LocalPlayer.Character.Head.Position
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and isEnemy(LocalPlayer, p) then
-            local dist = (ownHeadPos - p.Character.Head.Position).Magnitude
-            if dist < nearestDist then
-                nearestDist = dist
-                nearest = p.Character.Head
+    return ErrorHandler.executeWithFallback(
+        function()
+            local char = LocalPlayer.Character
+            if not char or not char:FindFirstChild("Head") then return nil end
+            
+            local nearest, nearestDist = nil, math.huge
+            local ownHeadPos = char.Head.Position
+            
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+                    local dist = (ownHeadPos - p.Character.Head.Position).Magnitude
+                    if dist < nearestDist then
+                        nearestDist = dist
+                        nearest = p.Character.Head
+                    end
+                end
             end
+            return nearest
+        end,
+        function()
+            return nil
         end
-    end
-    return nearest
+    )
 end
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == aimKey then
-        aimEnabled = not aimEnabled
-    end
-end)
-
-RunService.RenderStepped:Connect(function()
+ErrorHandler.safeHeartbeat(function()
     if aimEnabled then
         local target = getNearestEnemy()
         if target then
@@ -394,111 +682,61 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-local plr = game.Players.LocalPlayer
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-
+-- Fly với ErrorHandler
 local flying = false
 local speed = 50
-local maxSpeed = 150
-
-local torso, humanoid
-local bodyVelocity, bodyGyro
-
-local ctrl = {f=0,b=0,l=0,r=0}
-
-local function disableHumanoidStates()
-    if humanoid then
-        local con
-        con = humanoid.StateChanged:Connect(function(old,new)
-            if flying then
-                humanoid:ChangeState(Enum.HumanoidStateType.PlatformStanding)
-            else
-                con:Disconnect()
-            end
-        end)
-    end
-end
-
-local function teleSmall()
-    if torso and flying then
-        local char = plr.Character
-        if char and humanoid then
-            local moveDir = humanoid.MoveDirection
-            if moveDir.Magnitude > 0 then
-                local cam = workspace.CurrentCamera.CFrame
-                local moveVector = (cam.RightVector * moveDir.X + cam.LookVector * moveDir.Z).Unit * speed / 10
-                char:TranslateBy(moveVector)
-            end
-        end
-    end
-end
 
 local function Fly()
-    local char = plr.Character or plr.CharacterAdded:Wait()
-    torso = char:WaitForChild("HumanoidRootPart")
-    humanoid = char:WaitForChild("Humanoid")
+    return ErrorHandler.safeCharacterOperation(function(char)
+        local torso = char:WaitForChild("HumanoidRootPart")
+        local humanoid = char:WaitForChild("Humanoid")
 
-    disableHumanoidStates()
+        local bodyGyro = Instance.new("BodyGyro", torso)
+        bodyGyro.P = 9e4
+        bodyGyro.maxTorque = Vector3.new(9e9,9e9,9e9)
+        bodyGyro.cframe = torso.CFrame
 
-    bodyGyro = Instance.new("BodyGyro", torso)
-    bodyGyro.P = 9e4
-    bodyGyro.maxTorque = Vector3.new(9e9,9e9,9e9)
-    bodyGyro.cframe = torso.CFrame
+        local bodyVelocity = Instance.new("BodyVelocity", torso)
+        bodyVelocity.velocity = Vector3.new(0,0.1,0)
+        bodyVelocity.maxForce = Vector3.new(9e9,9e9,9e9)
 
-    bodyVelocity = Instance.new("BodyVelocity", torso)
-    bodyVelocity.velocity = Vector3.new(0,0.1,0)
-    bodyVelocity.maxForce = Vector3.new(9e9,9e9,9e9)
+        flying = true
+        humanoid.PlatformStand = true
+        char.Animate.Disabled = true
 
-    flying = true
-    humanoid.PlatformStand = true
-    char.Animate.Disabled = true
-
-    spawn(function()
         while flying do
-            teleSmall()
-            wait(0.05)
+            RunService.Heartbeat:Wait()
+            local moveVector = humanoid.MoveDirection
+            if moveVector.Magnitude > 0 then
+                local cam = workspace.CurrentCamera.CFrame
+                local velocity = (cam.RightVector * moveVector.X + cam.LookVector * moveVector.Z).Unit * speed
+                bodyVelocity.Velocity = Vector3.new(velocity.X,0,velocity.Z)
+                bodyGyro.CFrame = CFrame.new(torso.Position, torso.Position + workspace.CurrentCamera.CFrame.LookVector)
+            else
+                bodyVelocity.Velocity = Vector3.new(0,0,0)
+            end
         end
+        
+        flying = false
+        if bodyVelocity then bodyVelocity:Destroy() end
+        if bodyGyro then bodyGyro:Destroy() end
+        if humanoid then humanoid.PlatformStand = false end
+        if char.Animate then char.Animate.Disabled = false end
     end)
-
-    while flying do
-        RunService.Heartbeat:Wait()
-        local moveVector = humanoid.MoveDirection
-        if moveVector.Magnitude > 0 then
-            local cam = workspace.CurrentCamera.CFrame
-            local velocity = (cam.RightVector * moveVector.X + cam.LookVector * moveVector.Z).Unit * speed
-            bodyVelocity.Velocity = Vector3.new(velocity.X,0,velocity.Z)
-            bodyGyro.CFrame = CFrame.new(torso.Position, torso.Position + workspace.CurrentCamera.CFrame.LookVector)
-        else
-            bodyVelocity.Velocity = Vector3.new(0,0,0)
-        end
-    end
-    -- Cleanup
-    flying = false
-    if bodyVelocity then bodyVelocity:Destroy() end
-    if bodyGyro then bodyGyro:Destroy() end
-    if humanoid then humanoid.PlatformStand = false end
-    if char.Animate then char.Animate.Disabled = false end
 end
 
-local function startFly() 
-    if not flying then coroutine.wrap(Fly)() end 
-end
-
-local function stopFly() 
-    flying = false 
-end
-
--- Thêm toggle fly trong Fluent UI LocalPlayer tab
 Tabs.LocalPlayer:AddToggle("FlyToggle", {
     Title = "Fly (Demo)",
     Default = false,
     Callback = function(val)
-        if val then startFly() else stopFly() end
+        if val and not flying then 
+            task.spawn(Fly)
+        else 
+            flying = false 
+        end
     end
 })
 
--- Thêm slider điều chỉnh tốc độ bay trong Fluent UI tab LocalPlayer
 Tabs.LocalPlayer:AddSlider("FlySpeedSlider", {
     Title = "Fly",
     Description = "Speed",
@@ -511,79 +749,41 @@ Tabs.LocalPlayer:AddSlider("FlySpeedSlider", {
     end
 })
 
-local teleportUp = false
-local teleportDown = false
-local teleportHeight = 50
-
-Tabs.LocalPlayer:AddToggle("TeleportUpToggle", {
-    Title = "Teleport Up",
-    Description = "teleport lên trời",
-    Default = false,
-    Callback = function(val)
-        teleportUp = val
-        if teleportUp then
-            teleportDown = false
-        end
-    end
-})
-
-Tabs.LocalPlayer:AddToggle("TeleportDownToggle", {
-    Title = "Teleport Down",
-    Description = "teleport xuống dưới đất",
-    Default = false,
-    Callback = function(val)
-        teleportDown = val
-        if teleportDown then
-            teleportUp = false
-        end
-    end
-})
-
-RunService.Heartbeat:Connect(function()
-    local char = LocalPlayer.Character
-    if char then
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            if teleportUp then
-                hrp.CFrame = CFrame.new(hrp.Position + Vector3.new(0, teleportHeight, 0))
-            elseif teleportDown then
-                hrp.CFrame = CFrame.new(hrp.Position - Vector3.new(0, teleportHeight, 0))
-            end
-        end
-    end
-end)
-
+-- Auto Click
 local autoClickEnabled = false
-local autoClickDelay = 0.1
-
 Tabs.LocalPlayer:AddToggle("AutoClickToggle", {
     Title = "Auto Click",
-    Description = "Click như bình thường, không can thiệp",
+    Description = "Click như bình thường, nhưng nó tự động",
     Default = false,
     Callback = function(val)
         autoClickEnabled = val
     end
 })
 
-RunService.RenderStepped:Connect(function()
+ErrorHandler.safeHeartbeat(function()
     if autoClickEnabled then
-        local vm = game:GetService("VirtualInputManager")
-        vm:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-        task.wait(autoClickDelay)
-        vm:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+        ErrorHandler.executeWithFallback(
+            function()
+                local vm = game:GetService("VirtualInputManager")
+                vm:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                task.wait(0.1)
+                vm:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+            end,
+            function()
+                warn("Auto click failed")
+            end
+        )
     end
 end)
 
--- ========== Others Player Section (as you requested) ==========
+-- Others Player Section
 Tabs.LocalPlayer:AddSection("Others Player")
 
--- state
 local selectedPlayer = nil
 local teleportEnabled = false
 local spectateEnabled = false
-local teleportDelay = 1 -- mặc định 1s
+local teleportDelay = 1
 
--- helper: lấy danh sách player trừ mình
 local function getPlayerList()
     local list = {}
     for _, p in pairs(Players:GetPlayers()) do
@@ -594,7 +794,6 @@ local function getPlayerList()
     return list
 end
 
--- Dropdown dùng chung
 local playerDropdown = Tabs.LocalPlayer:AddDropdown("PlayerDropdown", {
     Title = "Player List",
     Values = getPlayerList(),
@@ -605,50 +804,19 @@ local playerDropdown = Tabs.LocalPlayer:AddDropdown("PlayerDropdown", {
     end
 })
 
-local Players = game:GetService("Players")
-local StarterGui = game:GetService("StarterGui")
-
--- Hàm lấy danh sách player
-local function getPlayerList()
-    local list = {}
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= Players.LocalPlayer then
-            table.insert(list, p.Name)
-        end
-    end
-    return list
-end
-
--- Hàm refresh danh sách
 local function safeRefreshPlayerList()
-    local list = getPlayerList()
-    if playerDropdown and type(playerDropdown.SetValues) == "function" then
-        local ok, err = pcall(function()
+    return ErrorHandler.executeWithFallback(
+        function()
+            local list = getPlayerList()
             playerDropdown:SetValues(list)
-        end)
-        if ok then
-            StarterGui:SetCore("SendNotification", {
-                Title = "Player List",
-                Text = "Đã làm mới danh sách player!",
-                Duration = 2
-            })
-        else
-            StarterGui:SetCore("SendNotification", {
-                Title = "Refresh Failed",
-                Text = "Không thể cập nhật dropdown!",
-                Duration = 3
-            })
+            sendNotification("Player List", "Đã làm mới danh sách player!", 2)
+        end,
+        function()
+            sendNotification("Refresh Failed", "Không thể cập nhật dropdown!", 3)
         end
-    else
-        StarterGui:SetCore("SendNotification", {
-            Title = "Refresh Failed",
-            Text = "Dropdown chưa được tạo hoặc không hỗ trợ!",
-            Duration = 3
-        })
-    end
+    )
 end
 
--- Nút bấm để refresh
 Tabs.LocalPlayer:AddButton({
     Title = "Refresh Player List",
     Callback = function()
@@ -656,7 +824,6 @@ Tabs.LocalPlayer:AddButton({
     end
 })
 
--- Teleport speed slider
 Tabs.LocalPlayer:AddSlider("TeleportSpeed", {
     Title = "Teleport",
     Description = "Speed",
@@ -669,7 +836,6 @@ Tabs.LocalPlayer:AddSlider("TeleportSpeed", {
     end
 })
 
--- Teleport toggle
 local teleportToggleControl
 teleportToggleControl = Tabs.LocalPlayer:AddToggle("TeleportToggle", {
     Title = "Teleport To Player",
@@ -679,22 +845,26 @@ teleportToggleControl = Tabs.LocalPlayer:AddToggle("TeleportToggle", {
         if teleportEnabled then
             task.spawn(function()
                 while teleportEnabled do
-                    if selectedPlayer and selectedPlayer ~= "" then
-                        local target = Players:FindFirstChild(selectedPlayer)
-                        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") and
-                           LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                            LocalPlayer.Character.HumanoidRootPart.CFrame =
-                                target.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
-                        else
+                    ErrorHandler.executeWithFallback(
+                        function()
+                            if selectedPlayer and selectedPlayer ~= "" then
+                                local target = Players:FindFirstChild(selectedPlayer)
+                                if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") and
+                                   LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                                    LocalPlayer.Character.HumanoidRootPart.CFrame =
+                                        target.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+                                else
+                                    error("Target not found")
+                                end
+                            else
+                                error("No player selected")
+                            end
+                        end,
+                        function()
                             teleportEnabled = false
                             teleportToggleControl:SetValue(false)
-                            break
                         end
-                    else
-                        teleportEnabled = false
-                        teleportToggleControl:SetValue(false)
-                        break
-                    end
+                    )
                     task.wait(teleportDelay)
                 end
             end)
@@ -702,7 +872,6 @@ teleportToggleControl = Tabs.LocalPlayer:AddToggle("TeleportToggle", {
     end
 })
 
--- Spectate toggle
 local spectateToggleControl
 spectateToggleControl = Tabs.LocalPlayer:AddToggle("SpectateToggle", {
     Title = "Spectate Player",
@@ -712,29 +881,34 @@ spectateToggleControl = Tabs.LocalPlayer:AddToggle("SpectateToggle", {
         if spectateEnabled then
             task.spawn(function()
                 while spectateEnabled do
-                    if selectedPlayer and selectedPlayer ~= "" then
-                        local target = Players:FindFirstChild(selectedPlayer)
-                        if target and target.Character and target.Character:FindFirstChild("Head") then
-                            workspace.CurrentCamera.CameraSubject = target.Character:FindFirstChild("Head")
-                        else
+                    ErrorHandler.executeWithFallback(
+                        function()
+                            if selectedPlayer and selectedPlayer ~= "" then
+                                local target = Players:FindFirstChild(selectedPlayer)
+                                if target and target.Character and target.Character:FindFirstChild("Head") then
+                                    workspace.CurrentCamera.CameraSubject = target.Character:FindFirstChild("Head")
+                                else
+                                    error("Target not found")
+                                end
+                            else
+                                error("No player selected")
+                            end
+                        end,
+                        function()
                             spectateEnabled = false
                             spectateToggleControl:SetValue(false)
-                            break
+                            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
+                                workspace.CurrentCamera.CameraSubject = LocalPlayer.Character:FindFirstChild("Head")
+                            end
                         end
-                    else
-                        spectateEnabled = false
-                        spectateToggleControl:SetValue(false)
-                        break
-                    end
+                    )
                     task.wait(0.1)
                 end
-                -- khi tắt spectate thì camera quay về mình
                 if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
                     workspace.CurrentCamera.CameraSubject = LocalPlayer.Character:FindFirstChild("Head")
                 end
             end)
         else
-            -- tắt spectate thì camera quay về mình
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
                 workspace.CurrentCamera.CameraSubject = LocalPlayer.Character:FindFirstChild("Head")
             end
@@ -742,7 +916,7 @@ spectateToggleControl = Tabs.LocalPlayer:AddToggle("SpectateToggle", {
     end
 })
 
--- auto disable teleport/spectate khi player rời game
+-- Auto disable teleport/spectate khi player rời game
 Players.PlayerRemoving:Connect(function(p)
     if p and p.Name == selectedPlayer then
         if teleportEnabled then
@@ -756,198 +930,232 @@ Players.PlayerRemoving:Connect(function(p)
     end
 end)
 
--- Server Tab --
-
+-- Server Tab
 Tabs.Server:AddButton({
     Title = "Rejoin Server",
     Callback = function()
-        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        ErrorHandler.executeWithFallback(
+            function()
+                TeleportService:Teleport(game.PlaceId, LocalPlayer)
+            end,
+            function()
+                sendNotification("Rejoin Failed", "Không thể rejoin server!", 3)
+            end
+        )
     end
 })
 
--- Thêm Server Hop vào tab Server
 Tabs.Server:AddButton({
     Title = "Hop Server",
     Callback = function()
-        local HttpService = game:GetService("HttpService")
-        local TeleportService = game:GetService("TeleportService")
-
-        local success, result = pcall(function()
-            local servers = HttpService:JSONDecode(game:HttpGet(
-                "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-            ))
-            return servers
-        end)
-
-        if success and result and result.data then
-            for _, server in ipairs(result.data) do
-                if server.playing < server.maxPlayers and server.id ~= game.JobId then
-                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id)
-                    return
+        ErrorHandler.executeWithFallback(
+            function()
+                local HttpService = game:GetService("HttpService")
+                local servers = HttpService:JSONDecode(game:HttpGet(
+                    "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+                ))
+                
+                if servers and servers.data then
+                    for _, server in ipairs(servers.data) do
+                        if server.playing < server.maxPlayers and server.id ~= game.JobId then
+                            TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id)
+                            return
+                        end
+                    end
+                    sendNotification("Server Hop", "Không tìm thấy server khác!", 3)
+                else
+                    error("No server data")
                 end
+            end,
+            function()
+                sendNotification("Server Hop", "Lỗi lấy danh sách server!", 3)
             end
-            game.StarterGui:SetCore("SendNotification", {
-                Title = "Server Hop",
-                Text = "Không tìm thấy server khác!",
-                Duration = 3
-            })
+        )
+    end
+})
+
+-- Bug Window Creation với ErrorHandler
+local function createBugWindow()
+    return ErrorHandler.executeWithFallback(
+        function()
+            local ScreenGui = Instance.new("ScreenGui")
+            ScreenGui.Name = "BugWindow"
+            ScreenGui.ResetOnSpawn = false
+            ScreenGui.Parent = game.CoreGui
+
+            local Frame = Instance.new("Frame")
+            Frame.Size = UDim2.fromOffset(480, 350)
+            Frame.Position = UDim2.new(0.5, -240, 0.5, -175)
+            Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+            Frame.BorderSizePixel = 0
+            Frame.Visible = true
+            Frame.Parent = ScreenGui
+
+            -- Draggable behavior
+            local dragging = false
+            local dragInput, dragStart, startPos
+
+            local function update(input)
+                local delta = input.Position - dragStart
+                Frame.Position = UDim2.new(
+                    startPos.X.Scale,
+                    startPos.X.Offset + delta.X,
+                    startPos.Y.Scale,
+                    startPos.Y.Offset + delta.Y
+                )
+            end
+
+            Frame.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = true
+                    dragStart = input.Position
+                    startPos = Frame.Position
+
+                    input.Changed:Connect(function()
+                        if input.UserInputState == Enum.UserInputState.End then
+                            dragging = false
+                        end
+                    end)
+                end
+            end)
+
+            Frame.InputChanged:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseMovement then
+                    dragInput = input
+                end
+            end)
+
+            UserInputService.InputChanged:Connect(function(input)
+                if input == dragInput and dragging then
+                    update(input)
+                end
+            end)
+
+            -- Title
+            local TitleLabel = Instance.new("TextLabel")
+            TitleLabel.Text = "Bugs Status"
+            TitleLabel.Size = UDim2.new(1, 0, 0, 40)
+            TitleLabel.BackgroundTransparency = 1
+            TitleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+            TitleLabel.Font = Enum.Font.SourceSansBold
+            TitleLabel.TextSize = 24
+            TitleLabel.Parent = Frame
+
+            -- Close Button
+            local CloseButton = Instance.new("TextButton")
+            CloseButton.Text = "X"
+            CloseButton.Size = UDim2.new(0, 30, 0, 30)
+            CloseButton.Position = UDim2.new(1, -35, 0, 5)
+            CloseButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            CloseButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+            CloseButton.Font = Enum.Font.SourceSansBold
+            CloseButton.TextSize = 20
+            CloseButton.Parent = Frame
+
+            CloseButton.MouseButton1Click:Connect(function()
+                ScreenGui:Destroy()
+            end)
+
+            -- ScrollFrame
+            local ScrollFrame = Instance.new("ScrollingFrame")
+            ScrollFrame.Size = UDim2.new(1, -20, 1, -50)
+            ScrollFrame.Position = UDim2.new(0, 10, 0, 40)
+            ScrollFrame.BackgroundTransparency = 1
+            ScrollFrame.BorderSizePixel = 0
+            ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+            ScrollFrame.Parent = Frame
+            ScrollFrame.ScrollBarThickness = 6
+
+            if #bugLogs == 0 then
+                local NoBugLabel = Instance.new("TextLabel")
+                NoBugLabel.Text = "No Bugs Found - All Systems Running Smoothly!"
+                NoBugLabel.Size = UDim2.new(1, 0, 0, 50)
+                NoBugLabel.BackgroundTransparency = 1
+                NoBugLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+                NoBugLabel.Font = Enum.Font.SourceSansBold
+                NoBugLabel.TextSize = 18
+                NoBugLabel.TextWrapped = true
+                NoBugLabel.Parent = ScrollFrame
+            else
+                local yPos = 0
+                for i, log in ipairs(bugLogs) do
+                    local label = Instance.new("TextLabel")
+                    label.Text = "[" .. i .. "] " .. log
+                    label.TextWrapped = true
+                    label.BackgroundTransparency = 1
+                    label.TextColor3 = Color3.fromRGB(255, 100, 100)
+                    label.Font = Enum.Font.SourceSans
+                    label.TextSize = 14
+                    label.Size = UDim2.new(1, 0, 0, 40)
+                    label.Position = UDim2.new(0, 0, 0, yPos)
+                    label.TextXAlignment = Enum.TextXAlignment.Left
+                    label.Parent = ScrollFrame
+                    yPos = yPos + 40
+                end
+                ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, yPos)
+            end
+            
+            return ScreenGui
+        end,
+        function()
+            warn("Failed to create bug window, using simple notification")
+            sendNotification("Bug Status", #bugLogs .. " bugs logged", 5)
+            return nil
+        end
+    )
+end
+
+-- Bugs Tab
+Tabs.Bugs:AddButton({
+    Title = "Check Status",
+    Description = "Xem tình trạng lỗi trong game",
+    Callback = function()
+        if not game.CoreGui:FindFirstChild("BugWindow") then
+            createBugWindow()
         else
-            game.StarterGui:SetCore("SendNotification", {
-                Title = "Server Hop",
-                Text = "Lỗi lấy danh sách server!",
-                Duration = 3
-            })
+            sendNotification("Bug Window", "Cửa sổ bug đã mở!", 2)
         end
     end
 })
 
--- Tạo tab Bugs
-local BugsTab = Window:AddTab({ Title = "Bugs", Icon = "terminal" })
+Tabs.Bugs:AddButton({
+    Title = "Clear Bug Logs",
+    Description = "Xóa tất cả log lỗi",
+    Callback = function()
+        bugLogs = {}
+        sendNotification("Bug Logs", "Đã xóa tất cả log lỗi!", 2)
+    end
+})
 
--- Bộ nhớ lưu lỗi console gần đây, giới hạn 50 lỗi
-local maxBugLog = 50
-local bugLogs = {}
+Tabs.Bugs:AddSection("Setting Bug Logs")
 
--- Bắt lỗi console, ghi lại lỗi đỏ
-local function onConsoleMessage(message, messageType)
-    if messageType == Enum.MessageType.MessageError or messageType == Enum.MessageType.MessageWarning then
-        if #bugLogs >= maxBugLog then
+Tabs.Bugs:AddToggle("GlobalErrorHandlerToggle", {
+    Title = "Global Error Handler",
+    Description = "Hệ thống bắt lỗi toàn cục",
+    Default = true,
+    Callback = function(val)
+        if val then
+            ErrorHandler.setupGlobalErrorHandler()
+            sendNotification("Error Handler", "Global Error Handler đã bật!", 2)
+        else
+            sendNotification("Error Handler", "Global Error Handler đã tắt!", 2)
+        end
+    end
+})
+
+Tabs.Bugs:AddSlider("MaxBugLogs", {
+    Title = "Max Bug Logs",
+    Description = "Số lượng log lỗi tối đa",
+    Min = 10,
+    Max = 100,
+    Default = 50,
+    Rounding = 0,
+    Callback = function(val)
+        maxBugLog = val
+        while #bugLogs > maxBugLog do
             table.remove(bugLogs, 1)
         end
-        table.insert(bugLogs, message)
-    end
-end
-game:GetService("LogService").MessageOut:Connect(onConsoleMessage)
-
--- Tạo Frame UI cho show bug
-local function createBugWindow()
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "BugWindow"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.Parent = game.CoreGui
-
-    local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.fromOffset(480, 350)
-    Frame.Position = UDim2.new(0.5, -240, 0.5, -175)  -- đặt giữa màn hình
-    Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    Frame.BorderSizePixel = 0
-    Frame.Visible = true
-    Frame.Parent = ScreenGui
-
-    -- Enable draggable behavior
-    local UserInputService = game:GetService("UserInputService")
-    local dragging = false
-    local dragInput
-    local dragStart
-    local startPos
-
-    local function update(input)
-        local delta = input.Position - dragStart
-        Frame.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
-    end
-
-    Frame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = Frame.Position
-
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-
-    Frame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            update(input)
-        end
-    end)
-
-    -- Tiêu đề
-    local TitleLabel = Instance.new("TextLabel")
-    TitleLabel.Text = "Bugs Status"
-    TitleLabel.Size = UDim2.new(1, 0, 0, 40)
-    TitleLabel.BackgroundTransparency = 1
-    TitleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
-    TitleLabel.Font = Enum.Font.SourceSansBold
-    TitleLabel.TextSize = 24
-    TitleLabel.Parent = Frame
-
-    -- Nút đóng
-    local CloseButton = Instance.new("TextButton")
-    CloseButton.Text = "X"
-    CloseButton.Size = UDim2.new(0, 30, 0, 30)
-    CloseButton.Position = UDim2.new(1, -35, 0, 5)
-    CloseButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    CloseButton.TextColor3 = Color3.fromRGB(255, 0, 0)
-    CloseButton.Font = Enum.Font.SourceSansBold
-    CloseButton.TextSize = 20
-    CloseButton.Parent = Frame
-
-    CloseButton.MouseButton1Click:Connect(function()
-        ScreenGui:Destroy()
-    end)
-
-    -- ScrollFrame chứa log lỗi
-    local ScrollFrame = Instance.new("ScrollingFrame")
-    ScrollFrame.Size = UDim2.new(1, -20, 1, -50)
-    ScrollFrame.Position = UDim2.new(0, 10, 0, 40)
-    ScrollFrame.BackgroundTransparency = 1
-    ScrollFrame.BorderSizePixel = 0
-    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-    ScrollFrame.Parent = Frame
-    ScrollFrame.ScrollBarThickness = 6
-
-    if #bugLogs == 0 then
-        local NoBugLabel = Instance.new("TextLabel")
-        NoBugLabel.Text = "No Bugs"
-        NoBugLabel.Size = UDim2.new(1, 0, 0, 30)
-        NoBugLabel.BackgroundTransparency = 1
-        NoBugLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
-        NoBugLabel.Font = Enum.Font.SourceSansBold
-        NoBugLabel.TextSize = 20
-        NoBugLabel.Parent = ScrollFrame
-    else
-        local yPos = 0
-        for i, log in ipairs(bugLogs) do
-            local label = Instance.new("TextLabel")
-            label.Text = log
-            label.TextWrapped = true
-            label.BackgroundTransparency = 1
-            label.TextColor3 = Color3.fromRGB(255, 0, 0)
-            label.Font = Enum.Font.SourceSans
-            label.TextSize = 18
-            label.Size = UDim2.new(1, 0, 0, 40)
-            label.Position = UDim2.new(0, 0, 0, yPos)
-            label.Parent = ScrollFrame
-            yPos = yPos + 40
-        end
-        ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, yPos)
-    end
-end
-
--- Thêm nút Check Status trong tab Bugs
-    BugsTab:AddButton({
-    Title = "Check Status",
-    Callback = function()
-        -- Nếu đang có cửa sổ bug thì không mở thêm
-        if not game.CoreGui:FindFirstChild("BugWindow") then
-            createBugWindow()
-        end
+        sendNotification("Bug Logs", "Đã cập nhật giới hạn log: " .. val, 2)
     end
 })
 
@@ -1003,10 +1211,32 @@ end
 
 Window:SelectTab(1)
 
-Fluent:Notify({
-    Title = "Owner",
-    Content = "Hacker Script Loaded!",
-    Duration = 6
-})
+-- Final Notification với ErrorHandler
+ErrorHandler.executeWithFallback(
+    function()
+        Fluent:Notify({
+            Title = "Script Loaded!",
+            Content = "Hacker Script Premium đã tải thành công với ErrorHandler!",
+            Duration = 6
+        })
+    end,
+    function()
+        sendNotification("Script Loaded", "Hacker Script Premium đã sẵn sàng!", 4)
+    end
+)
+    
+    -- Cleanup function để tránh memory leaks
+local function cleanup()
+    -- Disconnect all connections
+    if godModeConnection then godModeConnection:Disconnect() end
+    disableESP()
+    flying = false
+    
+    -- Clear bug logs
+    bugLogs = {}
+    
+    print("✅ Script cleanup completed!")
+end
 
--- Không gọi Window:Init()
+-- Return ErrorHandler để có thể sử dụng externally nếu cần
+return ErrorHandler
